@@ -46,16 +46,19 @@ why = "mesh booleans in Python; without it the CAD tool's booleans are used"
 name = "openscad"
 required = false
 why = "geometry engine for assembly sweeps and fixings checks (use the Manifold backend)"
+verify = ["openscad", "--version"]
 checks = ["assembly", "fixings", "fit"]
 
 [[program]]
 name = "bambu-studio"
 required = false
 why = "slices to real toolpaths (G-code) for the as-built and unsupported-plastic checks"
+verify = ["bambu-studio", "--help"]
 checks = ["toolpath", "asbuilt"]
 
 [[program]]
 name = "prusa-slicer"
 required = false
 why = "an alternative slicer for the same checks"
+verify = ["prusa-slicer", "--help"]
 checks = ["toolpath", "asbuilt"]

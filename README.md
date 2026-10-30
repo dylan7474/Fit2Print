@@ -25,6 +25,9 @@ Everything else is still in the Phonosphere repo (`cad/`) and is listed, with it
 4. **Look at it as well as measuring it**: checks produce pictures, not only numbers.
 5. Never waive a failed check; show it.
 
+## Run it in a container
+See [docs/DOCKER.md](docs/DOCKER.md): a 2.6 GB image with pinned OpenSCAD and Bambu Studio; tested on a home server with identical results to the laptop.
+
 ## Try it
     pip install -e .          # numpy, scipy, trimesh, pillow
     fit2print doctor

@@ -6,7 +6,7 @@ try:
 except ModuleNotFoundError:
     tomllib = None
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.environ.get("FIT2PRINT_HOME") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the folder holding deps.toml and profiles/
 DEFAULT_PROFILE = os.path.join(ROOT, "profiles", "bambu_a1_pla.toml")
 
 @dataclass

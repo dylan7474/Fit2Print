@@ -1,11 +1,11 @@
 """The dependency picklist (deps.toml): probe this machine and say which checks can run."""
-import importlib.util, os, shutil, sys
+import importlib.util, os, shutil, subprocess, sys
 try:
     import tomllib
 except ModuleNotFoundError:           # Python 3.10
     tomllib = None
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.environ.get("FIT2PRINT_HOME") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the folder holding deps.toml and profiles/
 
 def load(path=None):
     path = path or os.path.join(ROOT, "deps.toml")
@@ -22,8 +22,17 @@ def probe(spec=None):
         rows.append(dict(kind="module", name=m["name"], found=importlib.util.find_spec(m["name"]) is not None,
                          required=m.get("required", False), why=m.get("why", ""), checks=m.get("checks", []), pip=m.get("pip", m["name"])))
     for p in spec.get("program", []):
-        rows.append(dict(kind="program", name=p["name"], found=shutil.which(p["name"]) is not None,
-                         required=p.get("required", False), why=p.get("why", ""), checks=p.get("checks", []), pip=None))
+        found, note = shutil.which(p["name"]) is not None, ""
+        if found and p.get("verify"):                      # on the PATH is not the same as working: run it
+            try:
+                r = subprocess.run(p["verify"], capture_output=True, text=True, timeout=60)
+                found = r.returncode == 0
+                if not found:
+                    note = " (found but will not run: " + (r.stderr or r.stdout).strip().splitlines()[-1][:80] + ")"
+            except Exception as e:
+                found, note = False, f" (found but will not run: {e})"
+        rows.append(dict(kind="program", name=p["name"], found=found, required=p.get("required", False),
+                         why=p.get("why", "") + note, checks=p.get("checks", []), pip=None))
     return rows
 
 def report(rows):
