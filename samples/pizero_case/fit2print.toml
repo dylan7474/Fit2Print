@@ -6,3 +6,34 @@ adapter = "generic"
 printer_profile = "bambu_a1_pla"
 deliverables = "~/Downloads/fit2print_samples/pizero_case"
 model = "case.scad"              # an STL older than this is refused as stale
+hardware = ["pi-zero-2-w"]    # the components this design holds (the component library)
+
+[[render]]
+name = "pulled-apart"
+title = "Pulled apart: lid, board, base"
+part = "exploded"
+angle = [64, 0, 32]
+
+[[render]]
+name = "assembled-front"
+title = "Assembled, from the ports side"
+part = "assembly"
+angle = [62, 0, 28]
+
+[[render]]
+name = "assembled-back"
+title = "Assembled, from behind (the keyhole slots)"
+part = "assembly"
+angle = [118, 0, 28]
+
+[[render]]
+name = "print-base"
+title = "The base, as it will sit on the bed"
+part = "base"
+angle = [60, 0, 30]
+
+[[render]]
+name = "print-lid"
+title = "The lid, as it will sit on the bed (hooks up)"
+part = "lid_print"
+angle = [62, 0, 28]

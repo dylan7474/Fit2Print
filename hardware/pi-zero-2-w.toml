@@ -1,0 +1,100 @@
+id = "pi-zero-2-w"
+name = "Raspberry Pi Zero 2 W"
+category = "board"
+sources = ["https://datasheets.raspberrypi.com/rpizero2/raspberry-pi-zero-2-w-mechanical-drawing.pdf"]
+retrieved = "2026-10-30"
+note = "Header fitted: the 40-pin header is soldered on. Positions are from the board's left end (x) and its near long edge (y) with the header on the far edge."
+
+[dim.length]
+value = 65.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing"
+critical = true
+
+[dim.width]
+value = 30.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing"
+critical = true
+
+[dim.hole_inset]
+value = 3.5
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing: each mounting hole centre is 3.5 mm in from both edges (so the holes are 58 x 23 mm apart)"
+critical = true
+
+[dim.header_centre_x]
+value = 32.5
+unit = "mm"
+basis = "derived"
+source = "official drawing: 3.5 + 29 from the left edge, the centre of the board"
+
+[dim.port_hdmi_x]
+value = 12.4
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing (mini HDMI centre)"
+critical = true
+
+[dim.port_usb_data_x]
+value = 41.4
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing (micro USB, data)"
+critical = true
+
+[dim.port_usb_power_x]
+value = 54.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing (micro USB, power)"
+critical = true
+
+[dim.header_length]
+value = 51.0
+unit = "mm"
+basis = "derived"
+source = "20 pin pairs at 2.54 mm pitch"
+
+[dim.hole_diameter]
+value = 2.75
+unit = "mm"
+basis = "third-party"
+source = "widely published figure for the Pi Zero family; NOT on the official drawing"
+
+[dim.corner_radius]
+value = 3.0
+unit = "mm"
+basis = "estimate"
+source = "no published figure found"
+note = "measure the corner, or leave a generous clearance"
+
+[dim.board_thickness]
+value = 1.4
+unit = "mm"
+basis = "estimate"
+source = "typical for the PCB; not on the official drawing"
+critical = true
+
+[dim.header_height_above_board]
+value = 9.0
+unit = "mm"
+basis = "estimate"
+source = "no published figure found: a standard 2x20 header with long pins stands about 8.5 to 9 mm proud of the board"
+critical = true
+note = "the case height depends on this: measure it from the board's top face to the tips of the pins"
+
+[dim.hdmi_height_above_board]
+value = 3.2
+unit = "mm"
+basis = "estimate"
+source = "no published figure found"
+
+[dim.usb_height_above_board]
+value = 2.6
+unit = "mm"
+basis = "estimate"
+source = "no published figure found"

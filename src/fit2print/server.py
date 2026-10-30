@@ -3,8 +3,8 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
-import datetime, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import assistant as assistant_mod, dashboard, printer as printer_mod, project
+import datetime, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
+from . import assistant as assistant_mod, dashboard, hardware as hw_mod, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -35,7 +35,7 @@ a{color:var(--brand)}label{display:block;font-weight:600;margin:14px 0 4px}.note
 
 def page(title, body, token_note=""):
     return (f"<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>{esc(title)}</title><style>{CSS}</style></head><body>"
-            f"<header><div class=logo><a href='/'>Fit<b>2</b>Print</a></div><div class=small>{token_note}</div></header><div class=wrap>{body}</div></body></html>")
+            f"<header><div class=logo><a href='/'>Fit<b>2</b>Print</a></div><div class=small><a href='/hardware'>Components</a> {token_note}</div></header><div class=wrap>{body}</div></body></html>")
 
 def assistant_card(pid, folder, name, a, start=False, desc=""):
     """The assistant panel for a project page: past messages, a box, and a few lines of script that send a message and poll for the answer."""
@@ -75,6 +75,76 @@ async function ask(msg){{add('me',msg);btn.disabled=true;w.style.display='block'
  w.style.display='none';btn.disabled=false;}}
 document.getElementById('askform').addEventListener('submit',ev=>{{ev.preventDefault();const m=box.value.trim();if(!m)return;box.value='';ask(m)}});
 if({auto})ask(FIRST);}})();</script>"""
+
+def hardware_list():
+    lib = hw_mod.load_all()
+    rows = []
+    for k, e in sorted(lib.items()):
+        u = len(hw_mod.unverified(e)); n = len([1 for d in e["dim"].values() if d.get("critical")])
+        chip = "<span class='chip green'>all measured</span>" if u == 0 and n else f"<span class='chip amber'>{u} to measure</span>"
+        rows.append(f"<div class=card><div class=row><div><h3><a href='/hardware/{esc(k)}' style='text-decoration:none'>{esc(e.get('name', k))}</a></h3><div class=meta>{esc(e.get('category', ''))} &middot; {len(e['dim'])} dimensions, {n} the fit depends on</div></div>{chip}</div></div>")
+    return page("Components", "<h1>Components</h1><p class=sub>Real dimensions, each with where it came from and whether you have measured it. A design uses these numbers, never numbers from memory.</p>" + "".join(rows))
+
+def hardware_detail(hid, flash=""):
+    lib = hw_mod.load_all()
+    e = lib[hid]
+    rows = []
+    for k, d in e["dim"].items():
+        ver = hw_mod.is_verified(d)
+        status = (f"<span class='chip green'>measured {esc(hw_mod.value(d))} on {esc(d['measured'].get('on', ''))}</span>" if ver else f"<span class='chip grey'>{esc(d['basis'])}</span>")
+        form = ("" if ver else f"<form method=post action='/hardware/{esc(hid)}/verify' style='display:flex;gap:6px'><input type=hidden name=dim value='{esc(k)}'>"
+                f"<input name=value inputmode=decimal placeholder='mm' style='width:90px' required><button class='btn ghost' type=submit>I measured it</button></form>")
+        rows.append(f"<tr><td>{'<b>' if d.get('critical') else ''}{esc(k.replace('_', ' '))}{'</b>' if d.get('critical') else ''}</td><td>{esc(d['value'])} {esc(d.get('unit', ''))}</td><td>{status}</td>"
+                    f"<td class=small>{esc(d.get('source', ''))}</td><td>{form}</td></tr>")
+    src = "".join(f"<li><a href='{esc(s)}'>{esc(s)}</a></li>" for s in e.get("sources", []) if s.startswith("http"))
+    return page(e.get("name", hid), f"""<p><a href='/hardware'>&larr; Components</a></p><h1>{esc(e.get('name', hid))}</h1>
+{('<div class=flash>' + esc(flash) + '</div>') if flash else ''}<p class=sub>{esc(e.get('note', ''))}</p>
+<div class=card><table style='width:100%;border-collapse:collapse;font-size:14px'><tr style='text-align:left;color:var(--mute)'><th>Dimension (bold = the fit depends on it)</th><th>Published</th><th>Status</th><th>Source</th><th>Your measurement</th></tr>{''.join(rows)}</table></div>
+{('<div class=card><b>Sources</b><ul>' + src + '</ul></div>') if src else ''}
+<style>td,th{{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}}</style>""")
+
+RENDER_JOBS = {}
+
+def render_card(pid, folder, marker):
+    """'What it should look like': the project's rendered views, and a button to draw them again. Shown for a project that has a model or pictures."""
+    pics = render_mod.list_renders(folder, marker)
+    if not pics and not marker.get("model"):
+        return ""
+    ts = int(max((os.path.getmtime(os.path.join(folder, "renders", f)) for _, f in pics), default=0))
+    cells = "".join(f"<figure style='margin:0'><a href='/p/{esc(pid)}/renders/{esc(f)}?n={ts}'><img alt='{esc(t)}' src='/p/{esc(pid)}/renders/{esc(f)}?n={ts}' style='width:100%;border-radius:10px;border:1px solid var(--line)'></a>"
+                    f"<figcaption class=small>{esc(t)}</figcaption></figure>" for t, f in pics)
+    empty = "" if pics else "<div class=small>No pictures drawn yet.</div>"
+    btn = (f"<button class='btn ghost' id=rbtn type=button>Draw again</button><span id=rstat class=small style='margin-left:10px'></span>" if marker.get("model") else "")
+    return f"""<div class=card><div class=row><h3>What it should look like</h3><div>{btn}</div></div>{empty}
+<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:10px'>{cells}</div></div>
+<script>(function(){{const b=document.getElementById('rbtn');if(!b)return;const st=document.getElementById('rstat'),pid={json.dumps(pid)};
+b.addEventListener('click',async()=>{{b.disabled=true;st.textContent='drawing...';
+ const r=await fetch('/p/'+pid+'/render',{{method:'POST',headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:'go=1'}});
+ if(!r.ok){{st.textContent=await r.text();b.disabled=false;return}}
+ for(;;){{await new Promise(x=>setTimeout(x,1500));const s=await (await fetch('/p/'+pid+'/render/status')).json();
+  if(!s.running){{st.textContent=s.error||'done';location.reload();return}}}}}});}})();</script>"""
+
+def start_render(pid, folder, marker, command):
+    j = RENDER_JOBS.get(pid)
+    if j and j.get("running"):
+        raise RuntimeError("it is already drawing")
+    RENDER_JOBS[pid] = job = dict(running=True, error="", results=[])
+    def run():
+        try:
+            job["results"] = render_mod.render(folder, marker, command)
+            bad = [r for r in job["results"] if not r["ok"]]
+            job["error"] = f"{len(bad)} picture(s) could not be drawn: {bad[0]['error']}" if bad else ""
+        except Exception as e:
+            job["error"] = str(e)
+        job["running"] = False
+    threading.Thread(target=run, daemon=True).start()
+
+EMBED_CSS = """.f2p{margin-bottom:6px}.f2p .row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.f2p .small,.f2p .meta{color:var(--mute);font-size:14px}
+.f2p .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px}.f2p .card h3{margin:0 0 2px;font-size:19px}
+.f2p a.btn,.f2p button.btn{display:inline-block;background:var(--blue);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-size:16px;font-weight:600;text-decoration:none;cursor:pointer}
+.f2p .ghost{background:transparent!important;color:var(--blue)!important;border:1px solid var(--blue)!important}.f2p a{color:var(--blue)}
+.f2p textarea,.f2p input{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;background:var(--card);color:var(--ink)}.f2p .note{background:var(--bg);border-radius:10px;padding:10px 12px;font-size:15px}
+.f2p button:disabled{opacity:.5}"""
 
 def load_config(path=None):
     path = path or os.path.expanduser("~/.config/fit2print/config.toml")
@@ -252,7 +322,7 @@ def save_print(folder, marker, fields, files):
     return entry
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    app = None; token = None; printer = None; assistant = None
+    app = None; token = None; printer = None; assistant = None; render_command = None
     def log_message(self, *a): pass
     def _send(self, code, body, ctype="text/html; charset=utf-8", headers=()):
         b = body.encode() if isinstance(body, str) else body
@@ -297,7 +367,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except Exception:
                     return self._send(503, "the camera is not available", "text/plain")
             if path == "/new": return self._send(200, new_form(), headers=hdr)
+            if path == "/hardware": return self._send(200, hardware_list(), headers=hdr)
+            mh = re.fullmatch(r"/hardware/([a-z0-9-]+)", path)
+            if mh:
+                if mh.group(1) not in hw_mod.load_all(): return self._send(404, page("Not found", "<div class=card>No such component.</div>"))
+                return self._send(200, hardware_detail(mh.group(1), qs.get("msg", [""])[0]), headers=hdr)
             m = re.fullmatch(r"/p/([a-z0-9-]+)(/log)?", path)
+            jr = re.fullmatch(r"/p/([a-z0-9-]+)/renders/([a-z0-9_-]{1,40}\.png)", path)
+            if jr and jr.group(1) in self.app.projects():
+                fp = os.path.join(self.app.projects()[jr.group(1)][0], "renders", jr.group(2))
+                if not os.path.exists(fp): return self._send(404, "no such picture", "text/plain")
+                with open(fp, "rb") as fh: return self._send(200, fh.read(), "image/png", (("Cache-Control", "no-cache"),))
+            js = re.fullmatch(r"/p/([a-z0-9-]+)/render/status", path)
+            if js and js.group(1) in self.app.projects():
+                j = RENDER_JOBS.get(js.group(1), dict(running=False, error=""))
+                return self._send(200, json.dumps(dict(running=j["running"], error=j["error"])), "application/json", (("Cache-Control", "no-store"),))
             ja = re.fullmatch(r"/p/([a-z0-9-]+)/ask/([0-9a-f]{12})", path)
             if ja:
                 r = self.assistant.poll(ja.group(2), int(qs.get("n", ["0"])[0])) if self.assistant else None
@@ -311,7 +395,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><a class=btn href='/p/{pid}/log'>Log a print</a></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'>" + bar + asst, 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + render_card(pid, folder, mk) + asst + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))
@@ -342,6 +426,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     with open(bp, "w") as fh:
                         fh.write(b)
                 return self._redirect(f"/p/{pid}?start=1", hdr)
+            mv = re.fullmatch(r"/hardware/([a-z0-9-]+)/verify", u.path)
+            if mv:
+                f = {k: v[0] for k, v in urllib.parse.parse_qs(body.decode()).items()}
+                try:
+                    v = hw_mod.verify(mv.group(1), f.get("dim", ""), f.get("value", ""), "callipers")
+                except (KeyError, ValueError) as e:
+                    return self._send(400, page("Not saved", f"<div class=card><h3>Not saved</h3><div class=meta>{esc(e)}</div><p><a href='/hardware/{esc(mv.group(1))}'>Back</a></p></div>"))
+                return self._redirect(f"/hardware/{mv.group(1)}?msg=" + urllib.parse.quote(f"Saved: {f.get('dim')} = {v} mm (your measurement)"), hdr)
+            mr = re.fullmatch(r"/p/([a-z0-9-]+)/render", u.path)
+            if mr and mr.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[mr.group(1)]
+                if not mk.get("model"): return self._send(400, "this project has no model to draw yet", "text/plain")
+                try:
+                    start_render(mr.group(1), folder, mk, self.render_command)
+                except RuntimeError as e:
+                    return self._send(409, str(e), "text/plain")
+                return self._send(200, json.dumps(dict(started=True)), "application/json")
             ma = re.fullmatch(r"/p/([a-z0-9-]+)/ask", u.path)
             if ma and ma.group(1) in self.app.projects():
                 if not self.assistant: return self._send(503, "the assistant is not set up on this machine", "text/plain")
@@ -370,8 +471,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
-def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None, assistant=None):
+def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None, assistant=None, render_command=None):
     if host not in ("127.0.0.1", "localhost", "::1") and not token:
         raise SystemExit("listening on a network address needs --token (the page can add files to your projects)")
-    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer; Handler.assistant = assistant
+    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command
     return Server((host, port), Handler)

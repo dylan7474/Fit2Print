@@ -1,6 +1,7 @@
 """Read a generic Fit2Print project (made by `fit2print init`) into the neutral project dict the dashboard draws.
 Records: records/plates.jsonl (virtual checks), records/prints.jsonl (real prints), photos/ ; NEXT.md's 'Needs the person' list."""
 import glob, json, os, re
+from .. import hardware
 
 def _jsonl(path):
     return [json.loads(l) for l in open(path) if l.strip()] if os.path.exists(path) else []
@@ -31,5 +32,17 @@ def load(folder, marker=None):
             names.append(n)
     parts = [dict(name=n, group="Parts", what="", qty=1, colour="", fixings="", issues="") for n in names]
     m = marker or {}
+    hw_needs = []
+    try:
+        lib = hardware.load_all([hardware.shipped_dir(), hardware.USER_DIR, os.path.join(folder, 'hardware')])
+        for hid in m.get('hardware', []):
+            if hid in lib:
+                u = hardware.unverified(lib[hid])
+                if u:
+                    hw_needs.append(f"measure the {lib[hid].get('name', hid)} with callipers: {len(u)} fit-critical dimension(s) are not yet checked by you ({', '.join(u[:4])}{'...' if len(u) > 4 else ''})")
+            else:
+                hw_needs.append(f"the project uses '{hid}', which is not in the component library")
+    except Exception as e:
+        hw_needs.append(f"the component library could not be read: {e}")
     return dict(name=m.get("name", os.path.basename(folder)), subtitle=m.get("kind", ""), parts=parts, groups=["Parts"], runs=runs, prints=prints,
-                open_items=needs(folder), photos=sorted(glob.glob(os.path.join(folder, "photos", "*.jpg")) + glob.glob(os.path.join(folder, "photos", "*.png"))))
+                open_items=hw_needs + needs(folder), photos=sorted(glob.glob(os.path.join(folder, "photos", "*.jpg")) + glob.glob(os.path.join(folder, "photos", "*.png"))))

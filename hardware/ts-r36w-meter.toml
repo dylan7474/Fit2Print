@@ -1,0 +1,34 @@
+id = "ts-r36w-meter"
+name = "TS-R36W panel meter (500 uA, no backlight, solder tabs)"
+category = "meter"
+sources = []
+retrieved = "2026-10-30"
+note = "Taken from the Phonosphere project's model (the meter holder's pocket fitted 'nice and tight' on the printed test, 2026-10-18). No manufacturer drawing was found, so these are NOT sourced: measure them."
+
+[dim.case_side]
+value = 40.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere model parameters (mtr_sq)"
+critical = true
+
+[dim.case_depth]
+value = 9.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere model parameters (mtr_sq_t)"
+critical = true
+
+[dim.front_diameter]
+value = 36.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere model parameters (mtr_front_d): the round front"
+critical = true
+
+[dim.front_proud]
+value = 4.5
+unit = "mm"
+basis = "notes"
+source = "Phonosphere model parameters (mtr_front_t)"
+critical = true

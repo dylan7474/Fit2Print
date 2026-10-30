@@ -29,6 +29,10 @@ Everything else is still in the Phonosphere repo (`cad/`) and is listed, with it
 ## Start a project, and the playbook
 `fit2print init FOLDER --name "My thing"` makes a project from the template: marker, brief, `NEXT.md` (where it stands) and the AI's rules. [docs/PLAYBOOK.md](docs/PLAYBOOK.md) is the repeatable model: how a session starts and ends, the nine stages and who does what, the standing rules, what the AI may and may not do, and how Claude is wired in (with the concerns and what is done about each).
 
+## Components and renders
+* **Component library** (`hardware/`, `fit2print hardware list|show|verify|openscad`, and the Components page): real dimensions with where each came from (official drawing, derived, third-party, estimate, notes) and whether *you* have measured them. Your measurements live in `~/.config/fit2print/hardware/` and override the published figures; a project lists the components it holds (`hardware = [...]` in its marker) and "what I need from you" asks you to measure the fit-critical ones. A number with no source is refused.
+* **Renders** (`fit2print render PROJECT`, and "What it should look like" on the project page): pictures of each part as it will sit on the bed, assembled and pulled apart, drawn from the project's own model. The views are the marker's `[[render]]` tables.
+
 ## On a server, and from a phone
 See [docs/DEPLOY.md](docs/DEPLOY.md): the container on phobos (bound to localhost only), `fit2print sync` to keep it in step with the laptop's master copy, and the steps for a Cloudflare Zero Trust tunnel + Access policy.
 

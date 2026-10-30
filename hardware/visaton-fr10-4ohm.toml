@@ -1,0 +1,59 @@
+id = "visaton-fr10-4ohm"
+name = "Visaton FR 10, 4 ohm (art. 2020), 4 inch full-range"
+category = "speaker"
+sources = ["https://loudspeakerdatabase.com/VISATON/FR10-4", "https://speakerboxlite.com/subwoofers/visaton-fr-10-4/specifications", "https://en.toutlehautparleur.com/fullrange-speaker-visaton-fr-10-4-ohm-3-19-5-02-inch.html"]
+retrieved = "2026-10-30"
+note = "No official Visaton PDF was found on the web search of 2026-10-30; check these against Visaton's own datasheet. Do not confuse it with the FR 10 F or FR 10 HM, which have different parameters."
+
+[dim.frame_size]
+value = 105.0
+unit = "mm"
+basis = "third-party"
+source = "retailer listing (external dimensions 105 x 105 mm)"
+critical = true
+
+[dim.baffle_cutout_diameter]
+value = 100.0
+unit = "mm"
+basis = "third-party"
+source = "loudspeakerdatabase.com (baffle cutout)"
+critical = true
+
+[dim.resonance_fs]
+value = 90.0
+unit = "Hz"
+basis = "third-party"
+source = "loudspeakerdatabase.com and speakerboxlite.com agree (90 Hz)"
+
+[dim.qts]
+value = 0.54
+unit = ""
+basis = "third-party"
+source = "loudspeakerdatabase.com and speakerboxlite.com agree"
+
+[dim.vas]
+value = 2.3
+unit = "L"
+basis = "third-party"
+source = "speakerboxlite.com (2.3 L; a retailer lists 2.2)"
+
+[dim.mount_circle_diameter]
+value = 115.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere notes from the Visaton datasheet read in an earlier session (4 slots, 5 x 7 mm, on a 115 mm circle, 81 mm apart): not re-checked today"
+critical = true
+
+[dim.depth_behind_baffle]
+value = 44.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere notes (frame 3 mm + 44 mm behind it, magnet 70 mm across): not re-checked today"
+critical = true
+
+[dim.magnet_diameter]
+value = 70.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere notes: not re-checked today"
+critical = true

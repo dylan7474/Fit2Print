@@ -1,6 +1,6 @@
 """fit2print command line."""
 import argparse, sys
-from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync
+from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync, hardware, render as render_mod
 from .settings import Settings
 
 def cmd_doctor(args):
@@ -124,6 +124,38 @@ def cmd_sync(args):
           f"{'would push' if args.dry_run else 'pushed'} {len(r['pushed'])} file(s) + photos")
     return 0
 
+def cmd_hardware(args):
+    lib = hardware.load_all()
+    if args.action == "list":
+        for k, e in lib.items():
+            n, u = len(e.get("dim", {})), len(hardware.unverified(e))
+            print(f"{k:22} {e.get('category', ''):8} {e.get('name', '')}  ({u} fit-critical dimension(s) not yet measured by you)")
+        return 0
+    if not args.id or args.id not in lib:
+        print(f"no such component: {args.id}. Try: fit2print hardware list"); return 1
+    e = lib[args.id]
+    if args.action == "show":
+        print(f"{e.get('name')}  [{e.get('category')}]\n" + "\n".join("  source: " + s for s in e.get("sources", [])))
+        for k, d in e["dim"].items():
+            tag = f"MEASURED {hardware.value(d)} on {d['measured'].get('on')}" if hardware.is_verified(d) else f"unverified ({d['basis']})"
+            print(f"  {'*' if d.get('critical') else ' '} {k:28} {d['value']:>8} {d.get('unit', ''):3} {tag}   <- {d.get('source', '')[:70]}")
+        print("  (* = the fit depends on it)")
+        return 0
+    if args.action == "verify":
+        if not (args.dim and args.value):
+            print("usage: fit2print hardware verify ID DIMENSION VALUE [--how callipers]"); return 1
+        v = hardware.verify(args.id, args.dim, args.value, args.how, library=lib)
+        print(f"recorded: {args.id} {args.dim} = {v} (measured, in {hardware.USER_DIR})"); return 0
+    if args.action == "openscad":
+        print(hardware.openscad(e), end=""); return 0
+    return 1
+
+def cmd_render(args):
+    marker = read_marker(args.project)
+    for r in render_mod.render(args.project, marker):
+        print(f"{'ok  ' if r['ok'] else 'FAIL'}  {r['title']} -> renders/{r['name']}.png" + ("" if r["ok"] else f"  ({r['error']})"))
+    return 0
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -152,6 +184,11 @@ def main(argv=None):
     sy = s.add_parser("sync", help="keep the server's copy of a project in step with this master copy (pull its new log entries and photos, push the state)")
     sy.add_argument("project"); sy.add_argument("remote", help="folder, or host:folder over ssh"); sy.add_argument("--dry-run", action="store_true")
     sy.set_defaults(fn=cmd_sync)
+    hw = s.add_parser("hardware", help="the component library: list, show, verify (record YOUR measurement), openscad (parameters for a model)")
+    hw.add_argument("action", choices=["list", "show", "verify", "openscad"]); hw.add_argument("id", nargs="?"); hw.add_argument("dim", nargs="?"); hw.add_argument("value", nargs="?")
+    hw.add_argument("--how", default="callipers"); hw.set_defaults(fn=cmd_hardware)
+    rn = s.add_parser("render", help="draw pictures of what the design should look like (the project's [[render]] views, from its model)")
+    rn.add_argument("project"); rn.set_defaults(fn=cmd_render)
     a = p.parse_args(argv)
     return a.fn(a)
 
