@@ -90,7 +90,13 @@ def cmd_serve(args):
     if args.token_file:
         with open(os.path.expanduser(args.token_file)) as fh:
             token = fh.read().strip()
-    if args.host not in ("127.0.0.1", "localhost", "::1") and not token:
+    ac_cfg = cfg.get("access", {})
+    verifier = None
+    if ac_cfg.get("team_domain") and ac_cfg.get("aud"):
+        from . import access as access_mod
+        verifier = access_mod.Verifier(ac_cfg["team_domain"], ac_cfg["aud"], ac_cfg.get("allowed_emails"))
+        print(f"requests through Cloudflare need a valid Access login for {ac_cfg['team_domain']} (no token needed)")
+    if args.host not in ("127.0.0.1", "localhost", "::1") and not token and not args.trust_lan and not verifier:
         token = secrets.token_urlsafe(12)
         print(f"no --token given for a network address: made one for this run: {token}")
     from . import printer as printer_mod
@@ -111,7 +117,7 @@ def cmd_serve(args):
         print(f"assistant on: {' '.join(cmd)} (model {asst.model}, at most ${asst.budget} per message)")
     else:
         print("assistant off (no claude command found or disabled in config)")
-    srv = server.make_server(cfg, args.host, args.port, token, pr, asst, cfg.get("render_command"), args.trust_lan)
+    srv = server.make_server(cfg, args.host, args.port, token, pr, asst, cfg.get("render_command"), args.trust_lan, verifier)
     if args.trust_lan:
         print("home-network devices need no token (requests through a proxy still do)")
     q = f"?t={token}" if token else ""

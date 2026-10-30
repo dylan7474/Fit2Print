@@ -166,6 +166,7 @@ def load_config(path=None):
         cfg["new_projects_dir"] = os.path.expanduser(d.get("new_projects_dir", cfg["new_projects_dir"]))
         cfg["assistant"] = d.get("assistant", {})
         cfg["render_command"] = d.get("render", {}).get("command")
+        cfg["access"] = d.get("access", {})
     return cfg
 
 def read_marker(folder):
@@ -333,7 +334,7 @@ def save_print(folder, marker, fields, files):
     return entry
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    trust_lan = False
+    trust_lan = False; access = None
     PROXY_HEADERS = ("Cf-Ray", "Cf-Connecting-Ip", "Cf-Visitor", "Cf-Access-Jwt-Assertion", "Cdn-Loop", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip", "Forwarded", "True-Client-Ip")
     app = None; token = None; printer = None; assistant = None; render_command = None; plates = layerview.Cache()
     def log_message(self, *a): pass
@@ -347,29 +348,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(303); self.send_header("Location", to)
         for k, v in headers: self.send_header(k, v)
         self.end_headers()
-    def _on_my_network(self):
-        """True for a request straight from a device on the home network (private or loopback address) that has NOT been through a proxy. Anything that came
-        through the Cloudflare tunnel (which reaches us from this very machine) carries proxy headers, so it is never treated as the home network."""
-        if not self.trust_lan:
-            return False
-        if any(self.headers.get(h) for h in self.PROXY_HEADERS):
-            return False
+    def _proxied(self):
+        return any(self.headers.get(h) for h in self.PROXY_HEADERS)
+    def _client_ip(self):
         try:
             ip = ipaddress.ip_address(self.client_address[0].split("%")[0])
             if getattr(ip, "ipv4_mapped", None):
                 ip = ip.ipv4_mapped
-            return ip.is_private or ip.is_loopback
+            return ip
         except ValueError:
-            return False
+            return None
     def _auth(self, qs):
-        if not self.token or self._on_my_network():
+        """Who may in. 1) a device on the home network, straight (no proxy marks), when --trust-lan: always. 2) a request carrying proxy marks (the Cloudflare tunnel
+        reaches us from this very machine): only with a valid Cloudflare Access login proof, or, if Access is not configured, the token. 3) anything else: the
+        token if there is one; with no token only the machine's own localhost (development). A public address reaching us directly is never let in without the token."""
+        proxied, ip = self._proxied(), self._client_ip()
+        private = ip is not None and (ip.is_private or ip.is_loopback)
+        if self.trust_lan and not proxied and private:
             return True, ()
-        cookie = self.headers.get("Cookie", "")
-        if re.search(r"(?:^|;\s*)f2p=" + re.escape(self.token) + r"(?:;|$)", cookie):
-            return True, ()
-        if qs.get("t", [""])[0] == self.token:
-            return True, (("Set-Cookie", f"f2p={self.token}; HttpOnly; SameSite=Strict; Path=/"),)
-        return False, ()
+        if proxied and self.access:
+            cookie = self.headers.get("Cookie", "")
+            m = re.search(r"(?:^|;\s*)CF_Authorization=([A-Za-z0-9._-]+)", cookie)
+            tok = self.headers.get("Cf-Access-Jwt-Assertion") or (m.group(1) if m else "")
+            return (bool(tok) and self.access.check(tok)[0]), ()
+        if self.token:
+            cookie = self.headers.get("Cookie", "")
+            if re.search(r"(?:^|;\s*)f2p=" + re.escape(self.token) + r"(?:;|$)", cookie):
+                return True, ()
+            if qs.get("t", [""])[0] == self.token:
+                return True, (("Set-Cookie", f"f2p={self.token}; HttpOnly; SameSite=Strict; Path=/"),)
+            return False, ()
+        return (not proxied and ip is not None and ip.is_loopback), ()
     def _first_desc(self, folder):
         try:
             with open(os.path.join(folder, "brief.md")) as fh:
@@ -520,8 +529,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
-def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None, assistant=None, render_command=None, trust_lan=False):
-    if host not in ("127.0.0.1", "localhost", "::1") and not token:
-        raise SystemExit("listening on a network address needs --token (the page can add files to your projects)")
-    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command; Handler.trust_lan = trust_lan
+def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None, assistant=None, render_command=None, trust_lan=False, access=None):
+    if host not in ("127.0.0.1", "localhost", "::1") and not token and not trust_lan and not access:
+        raise SystemExit("listening on a network address needs --token, or --trust-lan (home network only), or a Cloudflare Access setting (the page can add files to your projects)")
+    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command; Handler.trust_lan = trust_lan; Handler.access = access
     return Server((host, port), Handler)

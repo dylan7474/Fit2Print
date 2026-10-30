@@ -38,15 +38,22 @@ Read it on phobos with `cat ~/f2p_server/token`. To change it: write a new one i
     ssh phobos 'systemctl --user restart fit2print'
 The old all-in-one container for the page was retired on 2026-10-31 (it could not run Claude or OpenSCAD); the `fit2print` image remains for the tools.
 
-## Remote access with a Cloudflare Zero Trust published application
-1. **A tunnel on phobos.** In Zero Trust: Networks > Tunnels > create a tunnel, choose Docker, and run the connector it gives you on phobos with `--network host` so that the service address `http://localhost:8750` reaches the container's published port.
-2. **A public hostname** for the tunnel, for example `fit2print.YOURDOMAIN`, with service type **HTTP** and URL `localhost:8750`.
-3. **An Access application (self-hosted)** for that exact hostname, with a policy that **allows only you** (your email, with a one-time PIN or your identity provider) and a session length you are comfortable with. Do not add a Bypass or Everyone policy.
-4. Keep the token as a second layer: open the first visit as `https://fit2print.YOURDOMAIN/?t=TOKEN` after you have signed in through Access.
-5. Do not publish port 8750 any other way (no router port forward).
+## Remote access with a Cloudflare Zero Trust published application (no token needed)
+The page needs no token on the internet path either. Cloudflare Access signs a login proof onto every request it lets through, and the page checks that signature against your team's public keys, so it only accepts a request that really passed YOUR Access login. If the Access application is ever missing or misconfigured, the proof is absent and the page refuses (it does not rely on Cloudflare's settings being right).
+1. **A tunnel on phobos.** Zero Trust > Networks > Tunnels > create a tunnel, choose Docker, run the connector it gives you on phobos with `--network host`, so that `http://localhost:8750` reaches the page.
+2. **A public hostname** for the tunnel, for example `fit2print.YOURDOMAIN`: service type **HTTP**, URL `localhost:8750`.
+3. **An Access application (self-hosted)** for that exact hostname, with a policy that **allows only your email** (your Cloudflare one-time PIN or identity provider). No Bypass, no Everyone.
+4. **Tell the page about it**: add to `~/f2p_server/config/config-native.toml` on phobos
+       [access]
+       team_domain = "YOURTEAM"          # the part before .cloudflareaccess.com (Zero Trust > Settings)
+       aud = "THE-APPLICATION-AUD-TAG"   # Access > Applications > your app > Overview > Application Audience (AUD) Tag
+       allowed_emails = ["you@example.com"]     # optional second check
+   then `systemctl --user restart fit2print`. Until this is set, requests through the tunnel are REFUSED (the safe default).
+5. Do not forward port 8750 on the router, and do not add another way in.
 
 ## What is and is not protected
-* The page can add print-log entries and photos to your projects and show the printer's camera. That is why it is behind both an Access login and a token, and why uploads are limited to real jpg/png images under 15 MB with server-chosen names.
-* It never sends a command to the printer that moves, heats or stops anything.
-* The printer's access code lives only in `config/printer.toml` (mode 600) and is never put in a page or a log.
-* Not yet verified by us: the Cloudflare side. Check from your phone on mobile data that the page asks for your Access login before showing anything.
+* The home network (private addresses, no proxy marks) is trusted and needs nothing, like your other apps. Anything on that network can add print-log entries, start the assistant (which costs money) and see the printer's camera.
+* Through the tunnel, only a request carrying a valid Cloudflare Access proof for your team, your application, unexpired and (if you set it) for your email.
+* A public address reaching the page directly (for example a router port forward) is refused.
+* The page never sends a command to the printer that moves, heats or stops anything. The printer's access code lives only in `config/printer.toml` (mode 600) and is never put in a page or a log.
+* The old shared token still exists as an option (`--token`/`--token-file`) but phobos no longer uses one.
