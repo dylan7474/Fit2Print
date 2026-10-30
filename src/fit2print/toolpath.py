@@ -10,10 +10,9 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage as ndi
-from . import gcode as g
+from . import airscan, gcode as g
 from .settings import Settings
 
-DIRS = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
 
 def footprint(segs, origin, shape, res, support_only=False):
     im = Image.new("1", (shape[1], shape[0]), 0)
@@ -28,7 +27,10 @@ def footprint(segs, origin, shape, res, support_only=False):
 def dilate(a, n):
     return ndi.binary_dilation(a, structure=np.ones((3, 3), bool), iterations=n) if n > 0 else a.copy()
 
-def shift(a, dx, dy):
+def shift(a, dx, dy):  # kept for callers; the scan uses airscan.shift
+    return airscan.shift(a, dx, dy)
+
+def _old_shift(a, dx, dy):
     """a shifted so out[y, x] = a[y + dy, x + dx] (False outside)."""
     out = np.zeros_like(a)
     h, w = a.shape
@@ -64,18 +66,7 @@ def analyse(layers, cfg=None, collect=None):
                 y0, y1 = max(0, ys.min() - n - 2), min(shape[0], ys.max() + n + 3)
                 x0, x1 = max(0, xs.min() - n - 2), min(shape[1], xs.max() + n + 3)
                 S, A = prev[y0:y1, x0:x1], air[y0:y1, x0:x1]
-                dist = []
-                for dx, dy in DIRS:
-                    step = RES * math.hypot(dx, dy)
-                    dd = np.full(S.shape, np.inf)
-                    for k in range(1, n + 1):
-                        hit = shift(S, dx * k, dy * k) & np.isinf(dd)
-                        dd[hit] = k * step
-                    dist.append(dd)
-                span = np.min(np.stack([dist[i] + dist[i + 4] for i in range(4)]), axis=0)
-                depth = np.min(np.stack(dist), axis=0)
-                bridge = A & np.isfinite(span)
-                cant = A & ~np.isfinite(span)
+                span, depth, bridge, cant = airscan.classify(S, A, RES, cfg.look)
                 if collect is not None:
                     sub = lambda M: [(round(origin[0] + (xx + x0) * RES, 1), round(origin[1] + (yy + y0) * RES, 1)) for yy, xx in zip(*np.where(M))][::4]
                     collect[z] = {"cant": sub(cant & (depth > 1.0)), "bridge": sub(bridge)}

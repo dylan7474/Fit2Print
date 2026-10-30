@@ -7,13 +7,16 @@ $fn = 48;
 pcb = [65, 30, 1.4];  hole_d = 2.75;  hole_in = 3.5;  corner_r = 3;
 header_h = 9;  tails = 2;
 
+// ---- snap fit: four hooks on the lid catch in four windows in the two END walls (the long walls have the ports and the header)
+hook_w = 6; hook_t = 1.2; hook_len = 10; tooth = 0.7; win_h = 2.0; hook_room = hook_t + 0.5;
+
 // ---- the case
 wall = 2.0;  floor_t = 4.0;  lid_t = 2.0;  clr = 0.4;
 post_h = tails + 1.0;  post_d = 5.5;  pin_d = hole_d - 0.35;
-inner = [pcb[0] + 2 * clr, pcb[1] + 2 * clr];
+inner = [pcb[0] + 2 * clr + 2 * hook_room, pcb[1] + 2 * clr];
 inner_h = post_h + pcb[2] + header_h + 0.8;
 outer = [inner[0] + 2 * wall, inner[1] + 2 * wall, floor_t + inner_h];
-bx = wall + clr;  by = wall + clr;  bz = floor_t + post_h;          // the board's origin in the case's frame
+bx = wall + clr + hook_room;  by = wall + clr;  bz = floor_t + post_h;          // the board's origin in the case's frame
 
 // ---- openings, along the board's near long edge (y = 0), from its left end
 usb_w = 8.4; usb_h = 3.4; hdmi_w = 11.8; hdmi_h = 3.8;
@@ -21,9 +24,6 @@ port_x = [12.4, 41.4, 54.0];                  // mini HDMI, micro USB (data), mi
 sd = [12.0, 2.6];
 // ---- hanging: two keyholes through the floor, head recess on the back
 key_head = 7.8; key_slot = 3.8; key_spacing = 40; key_len = 6; key_rec = 2.4;
-// ---- snap fit: four hooks on the lid catch in four windows in the long walls
-hook_w = 8; hook_t = 1.2; hook_len = 7; tooth = 0.7; win_h = 2.0;
-hook_x = [outer[0] * 0.27, outer[0] * 0.73];
 
 module rrect_c(s, r) translate([s[0] / 2, s[1] / 2]) offset(r = r) square([s[0] - 2 * r, s[1] - 2 * r], center = true);
 module board() {
@@ -51,7 +51,7 @@ module base() color("#2b2b2b") difference() {
     translate([wall, wall, floor_t]) linear_extrude(outer[2]) rrect_c(inner, 1.5);                       // the cavity
     for (i = [0, 1, 2]) translate([bx + port_x[i] - (i == 0 ? hdmi_w : usb_w) / 2, -1, bz + pcb[2] - 0.2]) cube([i == 0 ? hdmi_w : usb_w, wall + 2, (i == 0 ? hdmi_h : usb_h) + 0.4]);
     translate([-1, by + pcb[1] / 2 - sd[0] / 2, bz + pcb[2] - 0.2]) cube([wall + 2, sd[0], sd[1] + 0.4]);   // SD slot
-    for (x = hook_x, y = [-0.1, outer[1] - wall - 0.1]) translate([x - hook_w / 2 - 0.2, y, outer[2] - hook_len - 0.2]) cube([hook_w + 0.4, wall + 0.2, win_h + 0.4]);   // snap windows
+    for (xs = [-0.1, outer[0] - wall - 0.1], y = [outer[1] * 0.2, outer[1] * 0.8]) translate([xs, y - hook_w / 2 - 0.2, outer[2] - hook_len - 0.2]) cube([wall + 0.2, hook_w + 0.4, win_h + 0.4]);   // snap windows
     keyholes();
 }
 module posts_solid() for (x = [hole_in, pcb[0] - hole_in], y = [hole_in, pcb[1] - hole_in]) translate([bx + x, by + y, floor_t - 0.01]) {
@@ -60,27 +60,30 @@ module posts_solid() for (x = [hole_in, pcb[0] - hole_in], y = [hole_in, pcb[1] 
 module lid() color("#c9a227") difference() {
     union() {
         linear_extrude(lid_t) rrect_c([outer[0], outer[1]], 3);
-        translate([wall + 0.2, wall + 0.2, -2]) linear_extrude(2.01) difference() { rrect_c([inner[0] - 0.4, inner[1] - 0.4], 1.4); translate([1.2, 1.2]) rrect_c([inner[0] - 0.4 - 2.4, inner[1] - 0.4 - 2.4], 1); }   // locating lip
-        for (x = hook_x, side = [0, 1]) {                                                              // hooks hang inside the long walls, tooth outward
-            y0 = side == 0 ? wall + 0.2 : outer[1] - wall - 0.2 - hook_t;
-            translate([x - hook_w / 2, y0, -hook_len]) cube([hook_w, hook_t, hook_len + 0.01]);
-            translate([x - hook_w / 2, side == 0 ? y0 - tooth : y0 + hook_t, -hook_len]) rotate([90, 0, 0]) translate([0, 0, side == 0 ? -tooth : 0]) {
-                // a wedge: flat catch face on the plate side, sloped lead-in on the tip side
-                linear_extrude(tooth) polygon(side == 0 ? [[0, 0], [hook_w, 0], [hook_w, 0], [0, 0]] : [[0, 0], [hook_w, 0], [hook_w, 0], [0, 0]]);
-            }
-            translate([x - hook_w / 2, 0, -hook_len]) hook_tooth(side, y0);
+        for (side = [0, 1], y = [outer[1] * 0.2, outer[1] * 0.8]) {          // hooks hang inside the end walls, the tooth pointing out into the window
+            sgn = side == 0 ? -1 : 1;
+            x0 = side == 0 ? wall + 0.2 : outer[0] - wall - 0.2 - hook_t;
+            xf = side == 0 ? x0 : x0 + hook_t;                                // the hook's outer face
+            translate([x0, y - hook_w / 2, -hook_len]) cube([hook_t, hook_w, hook_len + 0.01]);
+            // the tooth: a flat catch face on the plate side (holds the lid on), a 45-degree lead-in on the tip side (slides in)
+            translate([xf, y + hook_w / 2, -hook_len]) rotate([90, 0, 0]) linear_extrude(hook_w) polygon([[0, 0.3], [sgn * tooth, 0.3 + tooth], [sgn * tooth, 0.3 + tooth + 1.0], [0, 0.3 + tooth + 1.0 + 0]]);
         }
     }
     for (i = [0 : 4]) translate([outer[0] / 2 - 8 + i * 4 - 0.8, outer[1] / 2 - 6, -0.1]) cube([1.6, 12, lid_t + 0.2]);   // vent slots
-}
-module hook_tooth(side, y0) {                       // side 0: toward -y; side 1: toward +y. Profile in (outward, up): flat catch below, 45-degree lead-in above
-    sgn = side == 0 ? -1 : 1;  y_face = side == 0 ? y0 : y0 + hook_t;
-    translate([0, y_face, 0]) rotate([90, 0, 90]) linear_extrude(hook_w) polygon([[0, 0.3], [sgn * tooth, 0.3], [sgn * tooth, 0.3 + 0.2], [0, 0.3 + 0.2 + tooth]]);
 }
 module board_in_case() translate([bx, by, bz]) board();
 module lid_on() translate([0, 0, outer[2]]) lid();
 if (part == "base") base();
 if (part == "lid") lid();
+if (part == "lid_print") translate([0, outer[1], lid_t]) rotate([180, 0, 0]) lid();      // flat on the bed, hooks up
 if (part == "board") board();
 if (part == "assembly") { base(); board_in_case(); lid_on(); }
 if (part == "exploded") { base(); translate([0, 0, 24]) board_in_case(); translate([0, 0, 52]) lid_on(); }
+
+// ---- check cases for run_checks.py (kept in the model so the checks use the model's own geometry)
+chk_off = 0;
+if (part == "chk_board_base") intersection() { base(); board_in_case(); }
+if (part == "chk_board_lid") intersection() { lid_on(); board_in_case(); }
+if (part == "chk_lid_base") intersection() { base(); lid_on(); }
+if (part == "chk_lid_path") intersection() { base(); translate([0, 0, chk_off]) lid_on(); }
+if (part == "chk_board_base_shifted") intersection() { base(); translate([0, 1.0, 0]) board_in_case(); }

@@ -7,6 +7,7 @@ plane intersection. Printed in layers, a 'new' region in layer n that has no mat
 import numpy as np
 import trimesh
 from scipy import ndimage as ndi
+from . import airscan
 
 def masks(mesh, zs, res=0.25):
     """Yield (z, mask, (x0, y0)): mask[j, i] is True where the mesh is solid at height z, on a grid of `res` mm."""
@@ -46,3 +47,31 @@ def unsupported(mesh, layer=0.28, reach=0.6, min_area=0.5, res=0.25):
                                    x=round(float(xx.mean() * res + x0), 1), y=round(float(yy.mean() * res + y0), 1)))
         prev = cur
     return events
+
+
+def analyse(mesh, layer=0.28, reach=0.6, look=15.0, res=0.25, min_area=0.5):
+    """Like unsupported(), but says what each unsupported region is. -> dict(cant=(depth mm, z, x, y) | None, bridge=(span mm, z, x, y) | None, events=[...]).
+    A bridge is held at both ends (the roof of a hole or slot); a cantilever is held on one side only or not at all."""
+    zs = np.arange(layer / 2, mesh.bounds[1][2], layer)
+    worst = dict(cant=None, bridge=None)
+    events, prev = [], None
+    for z, cur, (x0, y0) in masks(mesh, zs, res):
+        if prev is not None:
+            air = cur & ~ndi.binary_dilation(prev, structure=np.ones((3, 3), bool), iterations=max(1, int(np.ceil((reach + 0.5 * res) / res))))
+            if air.sum() * res * res > min_area:
+                ys, xs = np.nonzero(air)
+                n = int(look / res)
+                y0c, y1c = max(0, ys.min() - n - 2), min(air.shape[0], ys.max() + n + 3)
+                x0c, x1c = max(0, xs.min() - n - 2), min(air.shape[1], xs.max() + n + 3)
+                S, A = prev[y0c:y1c, x0c:x1c], air[y0c:y1c, x0c:x1c]
+                span, depth, bridge, cant = airscan.classify(S, A, res, look)
+                for kind, M, val in (("bridge", bridge, span), ("cant", cant, np.where(np.isinf(depth), look, depth))):
+                    if M.any():
+                        v = float(np.where(M, val, -1).max()); i = np.unravel_index(np.argmax(np.where(M, val, -1)), S.shape)
+                        pos = (round(float(z), 2), round(float((i[1] + x0c) * res + x0), 1), round(float((i[0] + y0c) * res + y0), 1))
+                        events.append(dict(kind=kind, size=round(v, 1), z=pos[0], x=pos[1], y=pos[2]))
+                        if worst[kind] is None or v > worst[kind][0]:
+                            worst[kind] = (round(v, 1),) + pos
+        prev = cur
+    worst["events"] = events
+    return worst

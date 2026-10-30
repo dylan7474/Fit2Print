@@ -26,10 +26,10 @@ Bambu A1, 0.4 mm nozzle, 0.28 mm layers (Extra Draft), PLA, profile `profiles/ba
 * The header kept reachable: a removable section of the lid over the GPIO pins.
 * A label recess.
 
-## Open questions for the user
-1. GPIO: kept inside the case (closed), or should a section be reachable? *(not answered yet)*
-2. Camera connector: needed, or can that end be closed? *(not answered yet)*
-3. Colour: black like the radio's hidden parts, or something visible?
+## Decisions (2026-10-30)
+* Direction approved by the user from concept picture 01: a plain box, the board filling it, a flat lid with hooks.
+* **Assumed, not asked** (the user said "go ahead"): GPIO stays inside, closed; the camera end is closed; black base, a contrasting lid (colour is only a render colour for now). Change these if wrong.
+* Board dimensions still unverified against the real board.
 
 ## Checks this project will exercise
 fit (board against case), printability (overhangs on the snap hooks and keyholes), snap-fit strength and tolerance (a coupon), assembly order, the screw-reach rule for the wall screws, the print log and the dashboard.

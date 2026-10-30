@@ -25,6 +25,9 @@
 | `print_log.py`, `parts_register.py` | the print log (with photos) and the register of every part | `log.py`, `register.py` | file formats into the project file |
 | `drop_to_bed.py` | put a part flat on the bed (had a float32 bug on big meshes) | `orient.py` | fix the rounding first |
 
+## Gaps found by the Pi Zero sample (2026-10-30)
+See `samples/pizero_case/FINDINGS.md`: the checks must read a project file (parts, build order, screws) instead of being hard-wired; `plate.py` is needed for any project; the dashboard needs a generic record format; model parameters should be exported, not scraped.
+
 ## Order of extraction
 1. `layers.py` (done), then `gcode.py` + `toolpath.py` (the unsupported-plastic checks on real G-code).
 2. `settings` (printer/material/limits in a file) so nothing is hard-coded.

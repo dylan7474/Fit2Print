@@ -25,6 +25,7 @@ class Settings:
     cantilever_block: float = 6.0
     bridge_check: float = 15.0
     bridge_block: float = 30.0
+    snap_strain_limit: float = 0.02
 
     @property
     def filament_area(self):
@@ -43,4 +44,4 @@ class Settings:
                    air_support_distance=a.get("support_distance", 0.9), air_check=a.get("check", 8.0), air_block=a.get("block", 25.0),
                    resolution=k.get("resolution", 0.25), reach=k.get("reach", 0.6), look=k.get("look", 15.0),
                    cantilever_check=k.get("cantilever_check", 3.5), cantilever_block=k.get("cantilever_block", 6.0),
-                   bridge_check=k.get("bridge_check", 15.0), bridge_block=k.get("bridge_block", 30.0))
+                   bridge_check=k.get("bridge_check", 15.0), bridge_block=k.get("bridge_block", 30.0), snap_strain_limit=d.get("snap", {}).get("strain_limit", 0.02))

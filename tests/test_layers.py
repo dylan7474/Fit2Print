@@ -24,5 +24,20 @@ class Layers(unittest.TestCase):
     def test_shallow_overhang_is_flagged(self): # NEGATIVE CONTROL: 4 mm out per mm up = 1.1 mm per layer, well beyond the reach
         self.assertTrue(layers.unsupported(self._frustum(4.0)))
 
+
+class Classify(unittest.TestCase):
+    def test_bridge_over_a_slot_is_a_bridge(self):      # a block with a 10 mm slot cut across, roofed over: the roof is held both ends
+        pillars = [trimesh.creation.box(extents=(10, 20, 6)), trimesh.creation.box(extents=(10, 20, 6))]
+        pillars[0].apply_translation((-10, 0, 3)); pillars[1].apply_translation((10, 0, 3))      # a gap of 10 mm between them
+        roof = trimesh.creation.box(extents=(30, 20, 2)); roof.apply_translation((0, 0, 7))
+        w = layers.analyse(trimesh.util.concatenate(pillars + [roof]))
+        self.assertIsNotNone(w["bridge"], "a roof over a slot was not seen as a bridge")
+        self.assertIsNone(w["cant"], "a roof held at both ends was called a cantilever")
+        self.assertAlmostEqual(w["bridge"][0], 10.0, delta=1.0)
+    def test_overhanging_shelf_is_a_cantilever(self):   # NEGATIVE CONTROL: held on one side only
+        w = layers.analyse(t_shape())
+        self.assertIsNotNone(w["cant"], "an overhanging shelf was not called a cantilever: broken")
+        self.assertGreater(w["cant"][0], 6.0)
+
 if __name__ == "__main__":
     unittest.main()

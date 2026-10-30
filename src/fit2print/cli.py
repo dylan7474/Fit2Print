@@ -12,11 +12,14 @@ def cmd_doctor(args):
 def cmd_overhang(args):
     import trimesh
     m = trimesh.load(args.mesh)
-    ev = layers.unsupported(m, layer=args.layer, reach=args.reach)
-    for e in ev:
-        print(f"layer at z {e['z']}: {e['area']} mm2 starts in mid-air near x {e['x']}, y {e['y']}")
-    print(f"{len(ev)} layer(s) with unsupported plastic" if ev else "no layer starts in mid-air")
-    return 1 if ev else 0
+    cfg = Settings.load(args.profile)
+    w = layers.analyse(m, layer=args.layer, reach=args.reach)
+    for e in w["events"]:
+        print(f"z {e['z']:6.2f}: {'bridge, held both ends, span' if e['kind'] == 'bridge' else 'CANTILEVER, depth'} {e['size']} mm near x {e['x']}, y {e['y']}")
+    c, b = (w["cant"][0] if w["cant"] else 0), (w["bridge"][0] if w["bridge"] else 0)
+    v = "BLOCK" if c > cfg.cantilever_block or b > cfg.bridge_block else "CHECK" if c > cfg.cantilever_check or b > cfg.bridge_check else "PASS"
+    print(f"{v}: worst cantilever {c} mm, worst bridge {b} mm (profile: {cfg.name})")
+    return 1 if v == "BLOCK" else 0
 
 def cmd_toolpath(args):
     cfg = Settings.load(args.profile)
@@ -61,7 +64,7 @@ def main(argv=None):
     s = p.add_subparsers(dest="cmd", required=True)
     s.add_parser("doctor", help="which tools are installed and which checks can run").set_defaults(fn=cmd_doctor)
     o = s.add_parser("overhang", help="find layers whose plastic has nothing under it (the part must sit z-up as printed)")
-    o.add_argument("mesh"); o.add_argument("--layer", type=float, default=0.28); o.add_argument("--reach", type=float, default=0.6)
+    o.add_argument("mesh"); o.add_argument("--layer", type=float, default=0.28); o.add_argument("--reach", type=float, default=0.6); o.add_argument("--profile", default=None)
     o.set_defaults(fn=cmd_overhang)
     t = s.add_parser("toolpath", help="on a sliced .3mf/.gcode: is every bit of plastic held up from below, and from how many sides")
     t.add_argument("plate", nargs="+"); t.add_argument("--profile", default=None, help="printer/material profile (default profiles/bambu_a1_pla.toml)")

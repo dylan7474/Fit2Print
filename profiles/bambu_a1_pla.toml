@@ -18,3 +18,6 @@ cantilever_check = 3.5          # mm depth: fine real prints went up to 4.2; a b
 cantilever_block = 6.0
 bridge_check = 15.0             # mm span held on opposite sides
 bridge_block = 30.0
+
+[snap]                          # a snap-fit hook is a cantilever beam: strain = 1.5 * thickness * deflection / length^2
+strain_limit = 0.02             # 2 %: conservative for PLA that must survive repeated opening (PLA yields at about 2-3 %, and printed layers are weaker across the layers). TO BE CALIBRATED with a hook coupon on the A1.
