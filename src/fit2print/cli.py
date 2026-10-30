@@ -1,6 +1,6 @@
 """fit2print command line."""
 import argparse, sys
-from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project
+from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync
 from .settings import Settings
 
 def cmd_doctor(args):
@@ -107,6 +107,13 @@ def cmd_serve(args):
         print("stopped")
     return 0
 
+def cmd_sync(args):
+    marker = read_marker(args.project)
+    r = sync.sync(args.project, args.remote, marker, args.dry_run)
+    print(("DRY RUN: " if args.dry_run else "") + f"pulled {r['pulled']} log entr{'y' if r['pulled'] == 1 else 'ies'} and {r['photos_pulled']} photo(s) from the server; "
+          f"{'would push' if args.dry_run else 'pushed'} {len(r['pushed'])} file(s) + photos")
+    return 0
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -132,6 +139,9 @@ def main(argv=None):
     sv.add_argument("--config", default=None, help="default ~/.config/fit2print/config.toml"); sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--printer", default=None, help="printer file, default ~/.config/fit2print/printer.toml"); sv.add_argument("--port", type=int, default=8750); sv.add_argument("--token", default=None, help="required for any address except localhost")
     sv.set_defaults(fn=cmd_serve)
+    sy = s.add_parser("sync", help="keep the server's copy of a project in step with this master copy (pull its new log entries and photos, push the state)")
+    sy.add_argument("project"); sy.add_argument("remote", help="folder, or host:folder over ssh"); sy.add_argument("--dry-run", action="store_true")
+    sy.set_defaults(fn=cmd_sync)
     a = p.parse_args(argv)
     return a.fn(a)
 
