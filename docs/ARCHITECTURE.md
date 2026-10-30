@@ -13,8 +13,8 @@
 | Phonosphere tool | What it does | Fit2Print module | Work needed |
 |---|---|---|---|
 | (new today) layer slicer | slice a mesh, find plastic with nothing under it | `layers.py` | **done** |
-| `anchor_check.py` | on real toolpaths: bridge span, cantilever depth, held on how many sides | `toolpath.py` | take printer limits from settings; remove the A1 constants |
-| `gcode_check.py` | read G-code into line segments | `gcode.py` | mostly generic |
+| `anchor_check.py` | on real toolpaths: bridge span, cantilever depth, held on how many sides | `toolpath.py` | **done** (limits from `profiles/`; same numbers as the original on real plates) |
+| `gcode_check.py` | read G-code into line segments; the air-line and flow checks | `gcode.py` (reader **done**), `air.py` (air line + flow: next) | port the air-line and flow checks |
 | `asbuilt_check.py` | compare what the slicer will print with the design (missing/extra, any turn angle) | `asbuilt.py` | generic; needs the mesh and G-code only |
 | `gate.py`, `selftest_checks.py` | the gate and the known-bad cases that must stay blocked | `gate.py`, `tests/` | split constants from logic |
 | `make_plate.py` | STL to a verified print file (slicer CLI, painted supports, stale-file guard) | `plate.py` | slicer profiles into settings; refuse stale input |

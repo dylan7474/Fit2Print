@@ -9,9 +9,12 @@ in the order it had to go, a flat shelf hanging in mid-air, a stale file printed
 ## Status: 0.1.0, extraction in progress
 Working now:
 * `fit2print doctor` reads the dependency picklist (`deps.toml`) and says which checks can run on this machine.
+* `fit2print toolpath plate.3mf` judges a sliced file on the real toolpaths (bridge span, cantilever, how each is held), with limits read from a printer profile (`profiles/`). It reproduces Phonosphere's `anchor_check.py` exactly on real plates.
 * `fit2print overhang part.stl` finds layers where plastic starts with nothing under it (a small self-contained layer slicer,
   `layers.py`; it needs only numpy, scipy and trimesh). On the Phonosphere lug coupon it flags the two layers that printed ragged and
   none on the fixed version.
+
+The plan for how the whole workflow (and an AI design assistant) is shown to a person is in [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
 Everything else is still in the Phonosphere repo (`cad/`) and is listed, with its plan, in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

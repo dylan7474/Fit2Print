@@ -1,0 +1,20 @@
+# Printer + material profile: the numbers the checks judge against. These came from Phonosphere's calibration card and real prints on a
+# Bambu A1 (0.4 mm nozzle, 0.28 mm Extra Draft, cheap PLA, 2026-10-27/28). Another printer or filament needs its own file, measured the same way.
+name = "Bambu A1, 0.28 mm, PLA"
+filament_diameter = 1.75        # mm
+flow_limit = 12.0               # mm3/s the nozzle can melt; share of time above it is reported
+flow_share_check = 0.05
+
+[air]                           # a line printed over air (from the G-code: gcode check)
+support_distance = 0.9          # mm: material this close underneath counts as support
+check = 8.0                     # mm of unbroken line over air: look at it
+block = 25.0                    # ... stop
+
+[anchor]                        # unsupported plastic, by how it is held (toolpath check)
+resolution = 0.25               # mm per pixel
+reach = 0.6                     # mm a layer may overhang the one below
+look = 15.0                     # mm searched for support
+cantilever_check = 3.5          # mm depth: fine real prints went up to 4.2; a broken corner was 7.0-7.2; failed arches 18-21
+cantilever_block = 6.0
+bridge_check = 15.0             # mm span held on opposite sides
+bridge_block = 30.0

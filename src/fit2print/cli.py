@@ -1,6 +1,7 @@
 """fit2print command line."""
 import argparse, sys
-from . import __version__, deps, layers
+from . import __version__, deps, layers, gcode, toolpath
+from .settings import Settings
 
 def cmd_doctor(args):
     text, bad = deps.report(deps.probe())
@@ -17,6 +18,19 @@ def cmd_overhang(args):
     print(f"{len(ev)} layer(s) with unsupported plastic" if ev else "no layer starts in mid-air")
     return 1 if ev else 0
 
+def cmd_toolpath(args):
+    cfg = Settings.load(args.profile)
+    bad = 0
+    for path in args.plate:
+        lay, _, _ = gcode.parse(gcode.read_gcode(path), cfg.filament_area)
+        v, lines = toolpath.report(lay, cfg)
+        print(f"{path.split('/')[-1]:44} {v}")
+        for l in lines:
+            print("      " + l)
+        bad |= v == "BLOCK"
+    print(f"profile: {cfg.name}")
+    return 1 if bad else 0
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -25,6 +39,9 @@ def main(argv=None):
     o = s.add_parser("overhang", help="find layers whose plastic has nothing under it (the part must sit z-up as printed)")
     o.add_argument("mesh"); o.add_argument("--layer", type=float, default=0.28); o.add_argument("--reach", type=float, default=0.6)
     o.set_defaults(fn=cmd_overhang)
+    t = s.add_parser("toolpath", help="on a sliced .3mf/.gcode: is every bit of plastic held up from below, and from how many sides")
+    t.add_argument("plate", nargs="+"); t.add_argument("--profile", default=None, help="printer/material profile (default profiles/bambu_a1_pla.toml)")
+    t.set_defaults(fn=cmd_toolpath)
     a = p.parse_args(argv)
     return a.fn(a)
 
