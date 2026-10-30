@@ -1,6 +1,6 @@
 """fit2print command line."""
 import argparse, sys
-from . import __version__, deps, layers, gcode, toolpath
+from . import __version__, deps, layers, gcode, toolpath, dashboard
 from .settings import Settings
 
 def cmd_doctor(args):
@@ -31,6 +31,14 @@ def cmd_toolpath(args):
     print(f"profile: {cfg.name}")
     return 1 if bad else 0
 
+def cmd_dashboard(args):
+    from .adapters import phonosphere
+    project = phonosphere.load(args.project)
+    page = dashboard.render(project)
+    open(args.out, "w").write(page)
+    print(f"{args.out}: {len(project['parts'])} parts, {len(project['prints'])} real prints, {len(project['runs'])} virtual-check runs, {len(page) // 1024} KB")
+    return 0
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -42,6 +50,9 @@ def main(argv=None):
     t = s.add_parser("toolpath", help="on a sliced .3mf/.gcode: is every bit of plastic held up from below, and from how many sides")
     t.add_argument("plate", nargs="+"); t.add_argument("--profile", default=None, help="printer/material profile (default profiles/bambu_a1_pla.toml)")
     t.set_defaults(fn=cmd_toolpath)
+    d = s.add_parser("dashboard", help="a one-page board of every part, what needs you, and the print log with photos")
+    d.add_argument("project", help="the Phonosphere cad/ folder"); d.add_argument("--out", default="dashboard.html")
+    d.set_defaults(fn=cmd_dashboard)
     a = p.parse_args(argv)
     return a.fn(a)
 

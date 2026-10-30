@@ -35,3 +35,7 @@ See [docs/DOCKER.md](docs/DOCKER.md): a 2.6 GB image with pinned OpenSCAD and Ba
     python -m unittest discover -s tests
 
 Private for now. Licence to be chosen before anything is shared.
+
+## The dashboard
+    fit2print dashboard ~/src/dylan7474/Phonosphere/cad --out dashboard.html
+One self-contained page: what needs you, a board of every part by state (not checked / ready / look first / on the printer / printed / failed), and the real print log with your photos. States are worked out from the records, never typed in.
