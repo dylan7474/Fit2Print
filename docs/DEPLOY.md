@@ -1,9 +1,11 @@
 # Running the front door on phobos (and reaching it from your phone)
 
-## What runs where (2026-10-30)
+## What runs where (2026-10-31)
 * **Laptop:** the MASTER copy of every project (model, checks, records). `fit2print serve` can also run here for local use.
-* **phobos:** a container `fit2print` (image `fit2print:0.3`) serving the page, **bound to 127.0.0.1:8750 only**, so the only way to it is something running on phobos itself (the Cloudflare tunnel connector). It holds a working copy of each project under `~/f2p_server/projects/`, the config under `~/f2p_server/config/` and the access token in `~/f2p_server/token` (mode 600).
-* The printer panel is live (the container talks to the printer directly, read-only). The project data is as of the last `sync`.
+* **phobos, the page:** a systemd *user* service `fit2print.service` (lingering is on, so it starts at boot) running `~/f2p_app/venv/bin/fit2print serve` on **127.0.0.1:8750 only**, so the only way to it is something on phobos itself (your Cloudflare tunnel connector). Source `~/f2p_app/Fit2Print` (installed editable), config `~/f2p_server/config/config-native.toml`, printer settings `~/f2p_server/config/printer.toml` (mode 600), token `~/f2p_server/token` (mode 600), project copies `~/f2p_server/projects/`.
+* **phobos, the heavy tools:** the container image `fit2print` (OpenSCAD and Bambu Studio, pinned). The page never runs them directly: it calls two wrapper scripts in `~/f2p_server/bin/` that start the container for one job, mounting only the project's folder: `f2p` (any Fit2Print command) and `f2p-openscad` (drawing the pictures).
+* **phobos, the assistant:** Claude Code (`~/.local/bin/claude`, already signed in) started by the page in the project's folder with a short allowlist of tools, one of which is the `f2p` wrapper. Nothing else can run.
+* The printer panel is live; the project data is as of the last `sync`.
 
 ## Daily use
     # on the laptop, whenever it is on: bring the phone's new log entries and photos home, push the latest state out
@@ -14,14 +16,14 @@ Projects started from the phone page are created on phobos in `projects/new/` an
 
 ## The first visit and the token
 Open the page once as `https://YOUR-HOST/?t=TOKEN`; it sets a cookie (HttpOnly, SameSite=Strict) and the token is not needed again on that device.
-Read it on phobos with `cat ~/f2p_server/token`. To change it: write a new one into that file and re-create the container (below).
+Read it on phobos with `cat ~/f2p_server/token`. To change it: write a new one into that file and restart the service.
 
-## Re-creating the container
-    cd ~/f2p_server && docker rm -f fit2print
-    docker run -d --name fit2print --restart unless-stopped --memory 1g --cpus 1 -p 127.0.0.1:8750:8750 \
-      -v $PWD/config:/config:ro -v $PWD/projects:/projects fit2print \
-      serve --host 0.0.0.0 --port 8750 --config /config/config.toml --printer /config/printer.toml --token "$(cat token)"
-To update the code: copy the Fit2Print folder to `~/f2p_build`, `docker build -f docker/Dockerfile -t fit2print:NEW -t fit2print:latest .`, then re-create as above.
+## Updating, restarting, looking at it
+    deploy/phobos.sh            # from the laptop: copy the source to phobos and restart the page  (add --image to rebuild the tools container too)
+    ssh phobos 'systemctl --user status fit2print'      # is it running
+    ssh phobos 'journalctl --user -u fit2print -n 50 --no-pager'     # what it said
+    ssh phobos 'systemctl --user restart fit2print'
+The old all-in-one container for the page was retired on 2026-10-31 (it could not run Claude or OpenSCAD); the `fit2print` image remains for the tools.
 
 ## Remote access with a Cloudflare Zero Trust published application
 1. **A tunnel on phobos.** In Zero Trust: Networks > Tunnels > create a tunnel, choose Docker, and run the connector it gives you on phobos with `--network host` so that the service address `http://localhost:8750` reaches the container's published port.

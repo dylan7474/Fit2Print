@@ -18,6 +18,13 @@ class Sync(unittest.TestCase):
     def test_first_sync_pushes_the_project(self):
         r = sync.sync(self.local, self.remote, self.marker)
         self.assertTrue(os.path.exists(os.path.join(self.remote, "fit2print.toml"))); self.assertIn("NEXT.md", r["pushed"])
+    def test_the_model_file_is_pushed_so_the_server_can_draw_it(self):
+        open(os.path.join(self.local, "case.scad"), "w").write("cube(1);")
+        r = sync.sync(self.local, self.remote, dict(adapter="generic", model="case.scad"))
+        self.assertIn("case.scad", r["pushed"]); self.assertTrue(os.path.exists(os.path.join(self.remote, "case.scad")))
+    def test_a_model_path_that_escapes_the_project_is_not_pushed(self):    # NEGATIVE CONTROL
+        self.assertNotIn("../x.scad", sync.push_files(dict(adapter="generic", model="../x.scad")))
+        self.assertNotIn("/etc/passwd", sync.push_files(dict(adapter="generic", model="/etc/passwd")))
     def test_new_entries_on_the_server_come_home_once(self):
         self.write(self.lp, [entry("a")]); self.write(self.rp, [entry("a"), entry("b")])
         self.assertEqual(sync.sync(self.local, self.remote, self.marker)["pulled"], 1)

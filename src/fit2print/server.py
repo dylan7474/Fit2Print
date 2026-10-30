@@ -148,13 +148,14 @@ EMBED_CSS = """.f2p{margin-bottom:6px}.f2p .row{display:flex;gap:10px;align-item
 
 def load_config(path=None):
     path = path or os.path.expanduser("~/.config/fit2print/config.toml")
-    cfg = dict(projects=[], new_projects_dir=os.path.expanduser("~/fit2print-projects"), assistant={})
+    cfg = dict(projects=[], new_projects_dir=os.path.expanduser("~/fit2print-projects"), assistant={}, render_command=None)
     if os.path.exists(path) and tomllib:
         with open(path, "rb") as f:
             d = tomllib.load(f)
         cfg["projects"] = [os.path.expanduser(p) for p in d.get("projects", [])]
         cfg["new_projects_dir"] = os.path.expanduser(d.get("new_projects_dir", cfg["new_projects_dir"]))
         cfg["assistant"] = d.get("assistant", {})
+        cfg["render_command"] = d.get("render", {}).get("command")
     return cfg
 
 def read_marker(folder):

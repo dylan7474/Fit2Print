@@ -14,7 +14,10 @@ def log_path(marker):
 def push_files(marker):
     if marker.get("adapter") == "phonosphere":
         return ["fit2print.toml", "parts_register.py", "PLATE_RESULTS.jsonl", "PARTS_AUDIT.json", "PRINT_LOG.jsonl"]
-    return ["fit2print.toml", "NEXT.md", "brief.md", os.path.join("records", "plates.jsonl"), os.path.join("records", "prints.jsonl")]
+    files = ["fit2print.toml", "NEXT.md", "brief.md", os.path.join("records", "plates.jsonl"), os.path.join("records", "prints.jsonl")]
+    m = marker.get("model")                                  # the model the pictures are drawn from, so the server can draw them too
+    files += [m] if isinstance(m, str) and not os.path.isabs(m) and ".." not in m.split("/") else []
+    return files
 
 def _run(cmd):
     r = subprocess.run(cmd, capture_output=True, text=True)
