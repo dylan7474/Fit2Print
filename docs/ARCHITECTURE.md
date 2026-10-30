@@ -17,7 +17,7 @@
 | `gcode_check.py` | read G-code into line segments; the air-line and flow checks | `gcode.py` (reader **done**), `air.py` (air line + flow: next) | port the air-line and flow checks |
 | `asbuilt_check.py` | compare what the slicer will print with the design (missing/extra, any turn angle) | `asbuilt.py` | generic; needs the mesh and G-code only |
 | `gate.py`, `selftest_checks.py` | the gate and the known-bad cases that must stay blocked | `gate.py`, `tests/` | split constants from logic |
-| `make_plate.py` | STL to a verified print file (slicer CLI, painted supports, stale-file guard) | `plate.py` | slicer profiles into settings; refuse stale input |
+| `make_plate.py` | STL to a verified print file (slicer CLI, painted supports, stale-file guard) | `plate.py` | **v1 done** (no-support parts, stale guard, records); still to port: painting supports under shelves, the as-built comparison, flipped orientations |
 | `plate_report.py`, `layer_viewer.py` | pictures of the layers | `report.py` | generic |
 | `check_fixings.py` + `fixings_check.scad` | every bolt hole passes through plastic; a straight run for a driver | `fixings.py` | the cases come from the project file, not hard-coded |
 | `check_assembly.py` + `assembly_check.scad` | the virtual build: sweeps in the real order, screw holes line up, thread bite | `assembly.py` | build order and screws from the project file |

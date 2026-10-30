@@ -53,5 +53,14 @@ class AgainstPhonosphere(unittest.TestCase):
     def test_top_plates(self):
         self.assertAlmostEqual(self._w("pod/top_plates.3mf")["bridge"][0], 6.2, delta=0.1)
 
+class ThinParts(unittest.TestCase):
+    def test_a_thin_stem_still_counts_as_a_layer(self):   # found 2026-10-30: a 4 mm stem had 19 segments per layer and was skipped, so the shelf above it was never checked
+        g = []
+        for k in range(8):                                  # a 10 x 10 mm stem in 8 long moves per layer (40 mm of line, under the 20-move rule)
+            g += loop(0.2 + 0.2 * k, 0, 0, 10, 10, step=5.0)
+        g += loop(1.8, -16, -16, 26, 26)                    # a shelf reaching 16 mm out on every side
+        lay, _, _ = gcode.parse(g)
+        self.assertEqual(toolpath.verdict(toolpath.analyse(lay)), "BLOCK", "a shelf over a thin stem was not blocked")
+
 if __name__ == "__main__":
     unittest.main()

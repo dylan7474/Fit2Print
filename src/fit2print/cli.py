@@ -1,6 +1,6 @@
 """fit2print command line."""
 import argparse, sys
-from . import __version__, deps, layers, gcode, toolpath, dashboard
+from . import __version__, deps, layers, gcode, toolpath, dashboard, plate
 from .settings import Settings
 
 def cmd_doctor(args):
@@ -58,6 +58,20 @@ def cmd_dashboard(args):
     print(f"{args.out}: {len(project['parts'])} parts, {len(project['prints'])} real prints, {len(project['runs'])} virtual-check runs, {len(page) // 1024} KB")
     return 0
 
+def cmd_plate(args):
+    import os
+    cfg = Settings.load(args.profile)
+    marker = read_marker(args.project) if args.project else {}
+    src = [os.path.join(args.project, s) for s in ([marker["model"]] if isinstance(marker.get("model"), str) else marker.get("model", []))] if args.project else None
+    bad = 0
+    for stl in args.stl:
+        r = plate.make(stl, args.out, cfg, filament=args.filament, source=src, project=args.project)
+        print(f"{r['part']:24} {r['verdict']:6} {r['minutes']} min {r['grams']} g -> {r['file']}")
+        for n in r["notes"]:
+            print("      " + n)
+        bad |= r["verdict"] == "BLOCK"
+    return 1 if bad else 0
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -72,6 +86,10 @@ def main(argv=None):
     d = s.add_parser("dashboard", help="a one-page board of every part, what needs you, and the print log with photos")
     d.add_argument("project", help="the Phonosphere cad/ folder"); d.add_argument("--out", default="dashboard.html")
     d.set_defaults(fn=cmd_dashboard)
+    pl = s.add_parser("plate", help="slice an STL with Bambu Studio and judge the toolpaths (parts that print without supports)")
+    pl.add_argument("stl", nargs="+"); pl.add_argument("--out", required=True); pl.add_argument("--project", default=None, help="project folder: records the result, and refuses an STL older than its model")
+    pl.add_argument("--filament", default="pla_black"); pl.add_argument("--profile", default=None)
+    pl.set_defaults(fn=cmd_plate)
     a = p.parse_args(argv)
     return a.fn(a)
 

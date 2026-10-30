@@ -77,6 +77,13 @@ def parse(lines, filament_area=math.pi * 0.875 ** 2):
         x, y = nx, ny
     return layers, flow_time, max_flow
 
-def real_layers(layers, min_segments=20):
-    """z values of real layers: a z with a handful of segments is a purge line or a wipe at a z-hop."""
-    return sorted(z for z in layers if sum(1 for f, _, _ in layers[z] if f != "Custom") >= min_segments)
+def real_layers(layers, min_segments=20, min_length=30.0):
+    """z values of real layers: a z with only a handful of short moves is a purge line or a wipe at a z-hop. A layer is real if it has
+    min_segments part moves OR min_length mm of them. (Segment count alone is not enough: a thin pin has few long-ish moves per layer, and
+    when it was skipped the layers above it had nothing to be compared with: 2026-10-30, found by the plate negative control.)"""
+    out = []
+    for z in sorted(layers):
+        part = [s for f, s, _ in layers[z] if f != "Custom"]
+        if len(part) >= min_segments or sum(seg_points(s, 1e9)[1] for s in part) >= min_length:
+            out.append(z)
+    return out

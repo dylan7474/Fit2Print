@@ -6,6 +6,7 @@ at both ends: a bridge, whose span is the shortest such pair's total length. Oth
 the nearest material below."""
 import math
 import numpy as np
+from scipy import ndimage as ndi
 
 DIRS = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
 
@@ -35,4 +36,6 @@ def classify(S, A, res, look):
     depth = np.min(np.stack(dist), axis=0)
     bridge = A & np.isfinite(span)
     cant = A & ~np.isfinite(span)
+    # a one-pixel-wide sliver along the edge of a band is the raster landing half a pixel off the layer below, not plastic hanging in the air
+    cant = ndi.binary_opening(cant, structure=np.ones((2, 2), bool))
     return span, depth, bridge, cant

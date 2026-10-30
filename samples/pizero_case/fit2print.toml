@@ -5,3 +5,4 @@ kind = "sample"
 adapter = "generic"
 printer_profile = "bambu_a1_pla"
 deliverables = "~/Downloads/fit2print_samples/pizero_case"
+model = "case.scad"              # an STL older than this is refused as stale

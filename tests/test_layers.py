@@ -39,5 +39,19 @@ class Classify(unittest.TestCase):
         self.assertIsNotNone(w["cant"], "an overhanging shelf was not called a cantilever: broken")
         self.assertGreater(w["cant"][0], 6.0)
 
+class Slivers(unittest.TestCase):
+    def test_one_pixel_sliver_is_not_a_cantilever(self):
+        from fit2print import airscan
+        S = np.zeros((60, 60), bool); S[:, :10] = True                  # material only far to the left
+        A = np.zeros_like(S); A[30, 40:50] = True                        # a one-pixel line of 'air' 
+        span, depth, bridge, cant = airscan.classify(S, A, 0.25, 15.0)
+        self.assertFalse(cant.any(), "a one-pixel sliver was reported as a cantilever")
+    def test_a_real_overhang_is_still_a_cantilever(self):             # NEGATIVE CONTROL for the sliver filter
+        from fit2print import airscan
+        S = np.zeros((60, 60), bool); S[:, :10] = True
+        A = np.zeros_like(S); A[20:40, 20:40] = True                      # a 5 x 5 mm patch, held on no side
+        cant = airscan.classify(S, A, 0.25, 15.0)[3]
+        self.assertTrue(cant.any(), "a real overhang was filtered out as a sliver")
+
 if __name__ == "__main__":
     unittest.main()

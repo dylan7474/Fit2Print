@@ -1,0 +1,2 @@
+{"date": "2026-10-30", "part": "base", "verdict": "PASS", "minutes": 18, "grams": 14, "notes": ["longest bridge 12.5 mm at z 11.40, x 91, y 122 (held on opposite sides)"], "file": "/home/djones/Downloads/fit2print_samples/pizero_case/plates/base.3mf", "stl_sha": "b61c434cd2", "profile": "Bambu A1, 0.28 mm, PLA"}
+{"date": "2026-10-30", "part": "lid_print", "verdict": "PASS", "minutes": 11, "grams": 6, "notes": [], "file": "/home/djones/Downloads/fit2print_samples/pizero_case/plates/lid_print.3mf", "stl_sha": "49b145e89e", "profile": "Bambu A1, 0.28 mm, PLA"}
