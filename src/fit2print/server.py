@@ -3,8 +3,8 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
-import datetime, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import dashboard, project
+import datetime, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
+from . import dashboard, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -29,7 +29,7 @@ a.btn,button.btn{display:inline-block;background:var(--brand);color:#fff;border:
 .needs{background:#fff7e6;border:1px solid #f1d9a6;border-radius:10px;padding:8px 12px;margin-top:10px;font-size:15px}@media (prefers-color-scheme:dark){.needs{background:#2d2616;border-color:#5a4a1f}}
 .chip{display:inline-block;font-size:12px;font-weight:700;color:#fff;border-radius:99px;padding:1px 9px}.violet{background:var(--violet)}.green{background:var(--green)}.amber{background:var(--amber)}.blue{background:var(--brand)}.grey{background:var(--mute)}.red{background:var(--red)}
 .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}input,select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;background:var(--card);color:var(--ink)}
-label{display:block;font-weight:600;margin:14px 0 4px}.note{background:#eef0f4;border-radius:10px;padding:10px 12px;font-size:15px}@media (prefers-color-scheme:dark){.note{background:#2a2a30}}
+a{color:var(--brand)}label{display:block;font-weight:600;margin:14px 0 4px}.note{background:#eef0f4;border-radius:10px;padding:10px 12px;font-size:15px}@media (prefers-color-scheme:dark){.note{background:#2a2a30}}
 .flash{background:#e6f4ea;border:1px solid #b7dfc2;border-radius:10px;padding:8px 12px;margin-bottom:14px}@media (prefers-color-scheme:dark){.flash{background:#1d2e23;border-color:#2f5a3c}}
 """
 
@@ -95,7 +95,44 @@ def summarise(data):
         if not t.lstrip("*").lower().startswith("resolved"): needs.append(dashboard.short(t, 110))
     return dict(total=total, printed=cards.get("printed", 0), chip=chip, needs=needs[:3], minutes=0)
 
-def home(app, flash=""):
+def printer_card(app, pr):
+    """The printer panel for Home: the last status the background poller got (the page never waits for the printer), the camera, the job's project."""
+    if pr is None:
+        return ""
+    st = pr.last
+    age = int(time.time() - st["at"]) if st.get("at") else None
+    state = st.get("state", "unknown")
+    colour = {"printing": "violet", "idle": "grey", "finished": "green", "failed": "red", "paused": "amber", "offline": "red"}.get(state, "grey")
+    if state in ("offline", "unknown"):
+        return (f"<div class=card><div class=row><h3>Printer</h3><span class='chip {colour}'>{esc(state)}</span></div>"
+                f"<div class=meta>{esc(st.get('error') or 'waiting for the first report')}</div></div>")
+    job = st.get("job") or ""
+    link = ""
+    for pid, (folder, m) in app.projects().items():
+        try:
+            _, _, data = app.load(pid)
+        except Exception:
+            continue
+        if any(job and dashboard.mentions(p["name"], job) for p in data["parts"]):
+            link = f"<a href='/p/{esc(pid)}'>{esc(m.get('name', pid).split(' (')[0])}</a>"
+            break
+    pct = st.get("percent")
+    left = st.get("minutes_left")
+    def hm(m): return f"{int(m)} min" if m < 60 else f"{int(m) // 60} h {int(m) % 60:02d} min"
+    def deg(x): return f"{round(x)}" if isinstance(x, (int, float)) else "-"
+    left_s = "about " + hm(left) if isinstance(left, (int, float)) and state == "printing" else "-"
+    rows = [("Job", esc(job or "-") + (f" &middot; {link}" if link else ""))]
+    if state == "printing" and pct is not None:
+        rows += [("Progress", f"{pct} % &middot; layer {st.get('layer')} of {st.get('layers')}"), ("Time left", left_s)]
+    rows += [("Nozzle / bed", f"{deg(st.get('nozzle'))} &deg;C / {deg(st.get('bed'))} &deg;C"), ("Problems", "yes: look at the printer" if st.get("errors") else "none")]
+    kv = "".join(f"<b style='color:var(--mute);font-weight:500'>{k}</b><span>{v}</span>" for k, v in rows)
+    bar = f"<div class=bar><i style='width:{int(pct)}%'></i></div>" if state == "printing" and isinstance(pct, (int, float)) else ""
+    return (f"<div class=card><div class=row><h3>Printer</h3><span class='chip {colour}'>{esc(state)}</span></div>{bar}"
+            f"<img alt='printer camera' src='/printer/frame.jpg?n={int(time.time())}' style='width:100%;border-radius:10px;display:block;margin:8px 0' onerror=\"this.style.display='none'\">"
+            f"<div style='display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:14px'>{kv}</div>"
+            f"<div class=small style='margin-top:8px'>updated {age if age is not None else '?'} s ago &middot; <a href='/'>refresh</a></div></div>")
+
+def home(app, flash="", pr=None):
     cards = []
     for pid, (folder, m) in app.projects().items():
         try:
@@ -109,8 +146,11 @@ def home(app, flash=""):
         cards.append(f"<div class=card><div class=row><div><h3>{esc(m.get('name', pid))}{kind}</h3><div class=meta>{s['total']} parts &middot; {s['printed']} printed</div></div>"
                      f"<span class='chip {s['chip'][1]}'>{s['chip'][0]}</span></div><div class=bar><i style='width:{pct}%'></i></div>{needs}"
                      f"<div class=actions><a class=btn href='/p/{esc(pid)}'>Open project</a><a class='btn ghost' href='/p/{esc(pid)}/log'>Log a print</a></div></div>")
+    pc = printer_card(app, pr)
     body = (f"{('<div class=flash>' + esc(flash) + '</div>') if flash else ''}<div class=row><div><h1>Your projects</h1><p class=sub>From an idea to a print, checked before anything is wasted.</p></div>"
-            f"<a class=btn href='/new'>+ New project</a></div>" + ("".join(cards) or "<div class=card>No projects yet. Start one.</div>"))
+            f"<a class=btn href='/new'>+ New project</a></div>"
+            + (f"<div style='display:grid;grid-template-columns:2fr 1fr;gap:18px' class=twocol><div>{''.join(cards) or '<div class=card>No projects yet. Start one.</div>'}</div><div>{pc}</div></div>"
+               "<style>@media(max-width:850px){.twocol{grid-template-columns:1fr!important}}</style>" if pc else ("".join(cards) or "<div class=card>No projects yet. Start one.</div>")))
     return page("Fit2Print", body)
 
 def new_form(err=""):
@@ -172,7 +212,7 @@ def save_print(folder, marker, fields, files):
     return entry
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    app = None; token = None
+    app = None; token = None; printer = None
     def log_message(self, *a): pass
     def _send(self, code, body, ctype="text/html; charset=utf-8", headers=()):
         b = body.encode() if isinstance(body, str) else body
@@ -201,7 +241,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = u.path
         try:
             if path == "/health": return self._send(200, "ok", "text/plain")
-            if path == "/": return self._send(200, home(self.app, qs.get("msg", [""])[0]), headers=hdr)
+            if path == "/": return self._send(200, home(self.app, qs.get("msg", [""])[0], self.printer), headers=hdr)
+            if path == "/printer/frame.jpg":
+                if self.printer is None: return self._send(404, "no printer set up", "text/plain")
+                try:
+                    return self._send(200, self.printer.frame(), "image/jpeg", (("Cache-Control", "no-store"),))
+                except Exception:
+                    return self._send(503, "the camera is not available", "text/plain")
             if path == "/new": return self._send(200, new_form(), headers=hdr)
             m = re.fullmatch(r"/p/([a-z0-9-]+)(/log)?", path)
             if m:
@@ -258,8 +304,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
-def make_server(cfg, host="127.0.0.1", port=8750, token=None):
+def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None):
     if host not in ("127.0.0.1", "localhost", "::1") and not token:
         raise SystemExit("listening on a network address needs --token (the page can add files to your projects)")
-    Handler.app = App(cfg); Handler.token = token
+    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer
     return Server((host, port), Handler)

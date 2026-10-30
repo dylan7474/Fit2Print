@@ -90,7 +90,15 @@ def cmd_serve(args):
     if args.host not in ("127.0.0.1", "localhost", "::1") and not token:
         token = secrets.token_urlsafe(12)
         print(f"no --token given for a network address: made one for this run: {token}")
-    srv = server.make_server(cfg, args.host, args.port, token)
+    from . import printer as printer_mod
+    pc = printer_mod.load_printer(args.printer)
+    pr = printer_mod.Printer(pc) if pc else None
+    if pr:
+        pr.start()
+        print(f"printer panel on: {pc['host']} (the access code is read from the printer file, never printed)")
+    else:
+        print("no printer set up (no ~/.config/fit2print/printer.toml): the printer panel is off")
+    srv = server.make_server(cfg, args.host, args.port, token, pr)
     q = f"?t={token}" if token else ""
     print(f"Fit2Print is at http://{'localhost' if args.host in ('127.0.0.1', 'localhost') else args.host}:{args.port}/{q}   (Ctrl+C to stop)")
     try:
@@ -122,7 +130,7 @@ def main(argv=None):
     i.set_defaults(fn=cmd_init)
     sv = s.add_parser("serve", help="the front door: a local web app (Home, project, log a print, new project)")
     sv.add_argument("--config", default=None, help="default ~/.config/fit2print/config.toml"); sv.add_argument("--host", default="127.0.0.1")
-    sv.add_argument("--port", type=int, default=8750); sv.add_argument("--token", default=None, help="required for any address except localhost")
+    sv.add_argument("--printer", default=None, help="printer file, default ~/.config/fit2print/printer.toml"); sv.add_argument("--port", type=int, default=8750); sv.add_argument("--token", default=None, help="required for any address except localhost")
     sv.set_defaults(fn=cmd_serve)
     a = p.parse_args(argv)
     return a.fn(a)
