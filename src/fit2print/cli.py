@@ -31,8 +31,24 @@ def cmd_toolpath(args):
     print(f"profile: {cfg.name}")
     return 1 if bad else 0
 
+def read_marker(folder):
+    """The project marker (fit2print.toml) of a folder, or an explanation of why there is none. Projects are never guessed."""
+    import os
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        raise SystemExit("Python 3.11+ is needed")
+    p = os.path.join(folder, "fit2print.toml")
+    if not os.path.exists(p):
+        raise SystemExit(f"{folder}: no fit2print.toml, so this is not a Fit2Print project (refusing to guess which project it is)")
+    with open(p, "rb") as f:
+        return tomllib.load(f)
+
 def cmd_dashboard(args):
     from .adapters import phonosphere
+    marker = read_marker(args.project)
+    if marker.get("adapter") != "phonosphere":
+        raise SystemExit(f"{args.project} is project '{marker.get('id')}' with adapter '{marker.get('adapter')}': no dashboard adapter for it yet")
     project = phonosphere.load(args.project)
     page = dashboard.render(project)
     open(args.out, "w").write(page)
