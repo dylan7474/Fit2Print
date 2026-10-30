@@ -39,7 +39,8 @@ RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir numpy 
 COPY pyproject.toml deps.toml README.md /src/
 COPY src /src/src
 COPY profiles /src/profiles
-RUN /opt/venv/bin/pip install --no-cache-dir /src && cp -r /src/deps.toml /src/profiles /opt/
+COPY templates /src/templates
+RUN /opt/venv/bin/pip install --no-cache-dir /src && cp -r /src/deps.toml /src/profiles /src/templates /opt/
 ENV PATH=/opt/venv/bin:$PATH HOME=/tmp FIT2PRINT_HOME=/opt
 RUN useradd -m -u 1000 f2p
 USER f2p

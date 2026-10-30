@@ -1,6 +1,6 @@
 """fit2print command line."""
 import argparse, sys
-from . import __version__, deps, layers, gcode, toolpath, dashboard, plate
+from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project
 from .settings import Settings
 
 def cmd_doctor(args):
@@ -72,6 +72,16 @@ def cmd_plate(args):
         bad |= r["verdict"] == "BLOCK"
     return 1 if bad else 0
 
+def cmd_init(args):
+    pid, folder = project.init(args.folder, args.name, args.kind, args.printer_profile)
+    print(f"created project '{pid}' in {folder}")
+    print("  fit2print.toml   the marker (every command reads it first)")
+    print("  brief.md         stage 0: fill this in with the AI")
+    print("  NEXT.md          where the project stands; rewritten at the end of every session")
+    print("  CLAUDE.md        the rules the AI reads at the start of every session")
+    print("  records/         checks, prints and photos are logged here")
+    return 0
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -90,6 +100,9 @@ def main(argv=None):
     pl.add_argument("stl", nargs="+"); pl.add_argument("--out", required=True); pl.add_argument("--project", default=None, help="project folder: records the result, and refuses an STL older than its model")
     pl.add_argument("--filament", default="pla_black"); pl.add_argument("--profile", default=None)
     pl.set_defaults(fn=cmd_plate)
+    i = s.add_parser("init", help="start a new project folder from the template (marker, brief, NEXT.md, AI rules)")
+    i.add_argument("folder"); i.add_argument("--name", required=True); i.add_argument("--kind", default="design-and-print"); i.add_argument("--printer-profile", default="bambu_a1_pla")
+    i.set_defaults(fn=cmd_init)
     a = p.parse_args(argv)
     return a.fn(a)
 

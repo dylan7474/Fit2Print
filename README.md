@@ -26,6 +26,9 @@ Everything else is still in the Phonosphere repo (`cad/`) and is listed, with it
 4. **Look at it as well as measuring it**: checks produce pictures, not only numbers.
 5. Never waive a failed check; show it.
 
+## Start a project, and the playbook
+`fit2print init FOLDER --name "My thing"` makes a project from the template: marker, brief, `NEXT.md` (where it stands) and the AI's rules. [docs/PLAYBOOK.md](docs/PLAYBOOK.md) is the repeatable model: how a session starts and ends, the nine stages and who does what, the standing rules, what the AI may and may not do, and how Claude is wired in (with the concerns and what is done about each).
+
 ## Run it in a container
 See [docs/DOCKER.md](docs/DOCKER.md): a 2.6 GB image with pinned OpenSCAD and Bambu Studio; tested on a home server with identical results to the laptop.
 
