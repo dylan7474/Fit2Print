@@ -1,0 +1,58 @@
+<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Fit2Print new project</title><style>
+:root{--bg:#f5f3ee;--card:#fff;--ink:#1d1b18;--mute:#6b665d;--line:#e3ded3;--brand:#2b5c8a;--green:#2f855a;--amber:#b7791f;--violet:#6b46c1;--red:#c53030}
+@media (prefers-color-scheme:dark){:root{--bg:#161512;--card:#1f1d19;--ink:#ece8df;--mute:#a39d90;--line:#36332c;--brand:#6aa7e0;--green:#5cc08a;--amber:#e0a23a;--violet:#a68bf0;--red:#ee7b7b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--card)}
+.logo{font-weight:700;font-size:20px}.logo>b{color:var(--brand)}.tag{font-size:12px;color:#fff;background:var(--violet);border-radius:99px;padding:2px 10px;margin-left:10px}
+.btn{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-size:16px;font-weight:600}.btn.ghost{background:transparent;color:var(--brand);border:1px solid var(--brand)}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 20px 40px}h1{font-size:26px;margin:4px 0 2px}.sub{color:var(--mute);margin:0 0 18px}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px}
+.card h3{margin:0 0 2px;font-size:19px}.meta{color:var(--mute);font-size:14px}.bar{height:8px;background:var(--line);border-radius:8px;margin:10px 0 6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--green)}
+.needs{background:#fff7e6;border:1px solid #f1d9a6;border-radius:10px;padding:8px 12px;margin-top:10px;font-size:15px}@media (prefers-color-scheme:dark){.needs{background:#2d2616;border-color:#5a4a1f}}
+.chip{display:inline-block;font-size:12px;font-weight:700;color:#fff;border-radius:99px;padding:1px 9px;margin-right:6px}
+.violet{background:var(--violet)}.green{background:var(--green)}.amber{background:var(--amber)}.blue{background:var(--brand)}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between}.small{font-size:13px;color:var(--mute)}
+.cam{width:100%;border-radius:10px;display:block}.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:14px;margin-top:8px}.kv b{color:var(--mute);font-weight:500}
+.mock{position:fixed;right:14px;bottom:10px;background:#111;color:#fff;font-size:12px;padding:3px 10px;border-radius:8px;opacity:.8}
+.actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+
+.steps{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 18px}.step{padding:5px 12px;border-radius:99px;border:1px solid var(--line);background:var(--card);font-size:14px;color:var(--mute)}.step.on{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:700}.step.done{color:var(--green);border-color:var(--green)}
+textarea,.field{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;background:var(--card);color:var(--ink)}
+.opt{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;background:var(--card)}.opt.sel{border-color:var(--brand);background:#eaf2fb}@media (prefers-color-scheme:dark){.opt.sel{background:#1c2a3a}}
+.dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--mute);margin-top:3px;flex:none}.sel .dot{border-color:var(--brand);background:radial-gradient(var(--brand) 45%,transparent 50%)}
+.q{font-weight:700;margin:16px 0 4px}.chips span{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:3px 12px;margin:4px 6px 0 0;font-size:14px;background:var(--card);color:var(--mute)}
+.bub{border-radius:12px;padding:9px 12px;margin:8px 0;font-size:15px}.ai{background:#eef0f4;margin-right:34px}.me{background:var(--brand);color:#fff;margin-left:34px}@media (prefers-color-scheme:dark){.ai{background:#2a2a30}}
+.unv{color:var(--amber);font-weight:700;font-size:12px}.brief{font-size:14px}.brief h4{margin:10px 0 2px;font-size:14px}.brief ul{margin:2px 0 6px 18px;padding:0}
+table{width:100%;border-collapse:collapse;font-size:14px}td{padding:5px 4px;border-bottom:1px solid var(--line)}
+</style></head><body>
+<header><div class=logo>Fit<b>2</b>Print<span class=tag style="color:#fff">MOCK-UP</span></div><div class=small>&larr; Your projects</div></header>
+<div class=wrap><h1>New project</h1>
+<div class=steps><span class="step on">1 Scope</span><span class=step>2 Concept</span><span class=step>3 Model</span><span class=step>4 Checks</span><span class=step>5 Plate</span><span class=step>6 Print</span><span class=step>7 Verify</span></div>
+<div class=grid><div>
+ <div class=card><h3>What do you want to make?</h3><div class=meta>Describe it in a line. The assistant asks what it needs to know.</div>
+  <textarea rows=2 style="margin-top:8px;font-size:18px">Pi Zero case</textarea>
+  <div class=chips><span>a bracket for my router</span><span>a case for a Pi Pico</span><span>a holder for my callipers</span><span>a cathedral radio</span></div></div>
+ <div class=card><h3>Three questions before I draw anything</h3>
+  <div class=q>Which board, and are its header pins fitted?</div>
+  <div class="opt sel"><i class=dot></i><div><b>Zero 2 W, pins soldered</b><div class=small>The case needs height above the board for the pins.</div></div></div>
+  <div class=opt><i class=dot></i><div><b>Zero 2 W, no pins</b></div></div><div class=opt><i class=dot></i><div><b>Zero W (original)</b></div></div>
+  <div class=q>How should it sit?</div>
+  <div class="opt sel"><i class=dot></i><div><b>Wall or under-desk mount</b><div class=small>Keyhole slots, hangs on a screw.</div></div></div><div class=opt><i class=dot></i><div><b>Desk or shelf, flat</b></div></div>
+  <div class=q>How should it close?</div>
+  <div class="opt sel"><i class=dot></i><div><b>Snap fit</b><div class=small>No screws. I will test the hook before the whole case.</div></div></div><div class=opt><i class=dot></i><div><b>Screws</b></div></div><div class=opt><i class=dot></i><div><b>You choose</b></div></div></div>
+ <div class=card><h3>Things I can not know: please measure</h3><div class=meta>I never invent a dimension. These come from the standard board drawing and are marked until you check them.</div>
+  <table><tr><td>Board length</td><td>65.0 mm</td><td><span class=unv>UNVERIFIED</span></td><td><input class=field value="" placeholder="your reading" style="width:130px"></td></tr>
+  <tr><td>Board width</td><td>30.0 mm</td><td><span class=unv>UNVERIFIED</span></td><td><input class=field placeholder="your reading" style="width:130px"></td></tr>
+  <tr><td>Header height above the board</td><td>9.0 mm</td><td><span class=unv>UNVERIFIED</span></td><td><input class=field placeholder="your reading" style="width:130px"></td></tr></table></div>
+ <div class=actions><button class=btn>Approve the brief and draw the first concept &rarr;</button><button class="btn ghost">Save and come back later</button></div>
+</div><div>
+ <div class=card class=brief><h3>The brief (draft)</h3><div class=brief>
+  <h4>What it is for</h4>A case for a Raspberry Pi Zero 2 W that hangs on a wall or under a desk, with a snap-fit lid.
+  <h4>Must</h4><ul><li>hold the board on four posts, no rattle</li><li>openings for the ports and the SD slot</li><li>two keyhole slots for hanging</li><li>a lid that snaps on and off at least 20 times</li><li>print without supports</li></ul>
+  <h4>Assumptions I made <span class=small>(correct me)</span></h4><ul><li>the GPIO header stays inside, closed</li><li>the camera end is closed</li><li>black base, lid in a second colour</li></ul></div></div>
+ <div class=card><h3>Assistant</h3>
+  <div class="bub me">Pi Zero case</div>
+  <div class="bub ai">I need three answers before I draw anything: which board, how it sits, and how it closes. I have also listed the dimensions I can not know. Please measure those before anything is printed.</div>
+  <div class="bub ai">Hooks bent that far need to be at least 8.5 mm long, so I will test one hook before printing the whole case.</div>
+  <input class=field placeholder="Ask or tell the assistant something...">
+ </div></div></div></div><div class=mock>mock-up: content from the Pi Zero sample</div></body></html>

@@ -51,6 +51,9 @@ The AI is a colleague with strict hands:
 * **A project is a folder**: `fit2print.toml` (parts, build order, screws, printer profile), the model sources, an `events.jsonl`, and `artefacts/` (pictures, plates, photos).
 * **Packaging later** (a desktop shell such as Tauri, or a container with OpenSCAD and the slicer inside) once the browser version is useful.
 
+## 4b. The front door (decided 2026-10-30)
+A local web app opened in the browser, working on a phone (photos are uploaded where the printer is). Screens drawn so far are in `docs/mockups/`. Entry is a screen, not a terminal; the assistant is a panel on it. How the page talks to Claude is still open (Claude Code run headlessly in the project folder, or the API with a key): decide once the screens work, and verify the behaviour in a container first.
+
 ## 5. Phases
 1. **Now**: CLI + reports. Extract the checks; settings in files.
 2. **Dashboard**: a static site generated from the event log: the board, parts, print timeline with photos. Useful on its own, no server.
