@@ -152,5 +152,24 @@ class AssistantPanel(unittest.TestCase):
         s, _ = self.call("POST", "/new", data, {"Content-Type": "application/x-www-form-urlencoded", "Content-Length": str(len(data))})
         self.assertEqual(s, 303)
 
+class TrustLan(unittest.TestCase):
+    def serve(self, trust):
+        d = tempfile.mkdtemp(); srv = server.make_server(dict(projects=[], new_projects_dir=d), "127.0.0.1", 0, token="s3cret", trust_lan=trust)
+        threading.Thread(target=srv.serve_forever, daemon=True).start(); self.addCleanup(lambda: (srv.shutdown(), srv.server_close()))
+        return srv.server_address[1]
+    def status(self, port, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10); c.request("GET", "/", headers=headers or {}); r = c.getresponse(); r.read(); return r.status
+    def test_a_device_on_the_home_network_needs_no_token_when_trusted(self):
+        self.assertEqual(self.status(self.serve(True)), 200)
+    def test_without_the_option_the_token_is_still_required(self):
+        self.assertEqual(self.status(self.serve(False)), 401)
+    def test_anything_through_the_cloudflare_tunnel_still_needs_the_token(self):     # NEGATIVE CONTROL: the tunnel reaches us from this machine
+        p = self.serve(True)
+        for h in ("Cf-Ray", "Cf-Connecting-Ip", "Cf-Access-Jwt-Assertion", "X-Forwarded-For", "Forwarded", "Cdn-Loop"):
+            self.assertEqual(self.status(p, {h: "1.2.3.4"}), 401, h)
+    def test_a_proxied_request_with_the_token_works(self):
+        p = self.serve(True)
+        c = http.client.HTTPConnection("127.0.0.1", p, timeout=10); c.request("GET", "/?t=s3cret", headers={"Cf-Ray": "x"}); r = c.getresponse(); r.read(); self.assertEqual(r.status, 200)
+
 if __name__ == "__main__":
     unittest.main()

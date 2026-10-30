@@ -3,7 +3,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
-import datetime, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
+import datetime, ipaddress, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
 from . import assistant as assistant_mod, dashboard, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
@@ -333,6 +333,8 @@ def save_print(folder, marker, fields, files):
     return entry
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    trust_lan = False
+    PROXY_HEADERS = ("Cf-Ray", "Cf-Connecting-Ip", "Cf-Visitor", "Cf-Access-Jwt-Assertion", "Cdn-Loop", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip", "Forwarded", "True-Client-Ip")
     app = None; token = None; printer = None; assistant = None; render_command = None; plates = layerview.Cache()
     def log_message(self, *a): pass
     def _send(self, code, body, ctype="text/html; charset=utf-8", headers=()):
@@ -345,8 +347,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(303); self.send_header("Location", to)
         for k, v in headers: self.send_header(k, v)
         self.end_headers()
+    def _on_my_network(self):
+        """True for a request straight from a device on the home network (private or loopback address) that has NOT been through a proxy. Anything that came
+        through the Cloudflare tunnel (which reaches us from this very machine) carries proxy headers, so it is never treated as the home network."""
+        if not self.trust_lan:
+            return False
+        if any(self.headers.get(h) for h in self.PROXY_HEADERS):
+            return False
+        try:
+            ip = ipaddress.ip_address(self.client_address[0].split("%")[0])
+            if getattr(ip, "ipv4_mapped", None):
+                ip = ip.ipv4_mapped
+            return ip.is_private or ip.is_loopback
+        except ValueError:
+            return False
     def _auth(self, qs):
-        if not self.token:
+        if not self.token or self._on_my_network():
             return True, ()
         cookie = self.headers.get("Cookie", "")
         if re.search(r"(?:^|;\s*)f2p=" + re.escape(self.token) + r"(?:;|$)", cookie):
@@ -504,8 +520,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
-def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None, assistant=None, render_command=None):
+def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None, assistant=None, render_command=None, trust_lan=False):
     if host not in ("127.0.0.1", "localhost", "::1") and not token:
         raise SystemExit("listening on a network address needs --token (the page can add files to your projects)")
-    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command
+    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command; Handler.trust_lan = trust_lan
     return Server((host, port), Handler)

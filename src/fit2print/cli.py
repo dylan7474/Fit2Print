@@ -111,7 +111,9 @@ def cmd_serve(args):
         print(f"assistant on: {' '.join(cmd)} (model {asst.model}, at most ${asst.budget} per message)")
     else:
         print("assistant off (no claude command found or disabled in config)")
-    srv = server.make_server(cfg, args.host, args.port, token, pr, asst, cfg.get("render_command"))
+    srv = server.make_server(cfg, args.host, args.port, token, pr, asst, cfg.get("render_command"), args.trust_lan)
+    if args.trust_lan:
+        print("home-network devices need no token (requests through a proxy still do)")
     q = f"?t={token}" if token else ""
     print(f"Fit2Print is at http://{'localhost' if args.host in ('127.0.0.1', 'localhost') else args.host}:{args.port}/{q}   (Ctrl+C to stop)")
     try:
@@ -211,7 +213,7 @@ def main(argv=None):
     i.set_defaults(fn=cmd_init)
     sv = s.add_parser("serve", help="the front door: a local web app (Home, project, log a print, new project)")
     sv.add_argument("--config", default=None, help="default ~/.config/fit2print/config.toml"); sv.add_argument("--host", default="127.0.0.1")
-    sv.add_argument("--printer", default=None, help="printer file, default ~/.config/fit2print/printer.toml"); sv.add_argument("--port", type=int, default=8750); sv.add_argument("--token", default=None, help="required for any address except localhost"); sv.add_argument("--token-file", default=None, help="read the token from this file (keeps it off the command line)")
+    sv.add_argument("--printer", default=None, help="printer file, default ~/.config/fit2print/printer.toml"); sv.add_argument("--port", type=int, default=8750); sv.add_argument("--token", default=None, help="required for any address except localhost"); sv.add_argument("--trust-lan", action="store_true", help="devices on the home network (private addresses) need no token, unless the request came through a proxy such as a Cloudflare tunnel"); sv.add_argument("--token-file", default=None, help="read the token from this file (keeps it off the command line)")
     sv.set_defaults(fn=cmd_serve)
     sy = s.add_parser("sync", help="keep the server's copy of a project in step with this master copy (pull its new log entries and photos, push the state)")
     sy.add_argument("project"); sy.add_argument("remote", help="folder, or host:folder over ssh"); sy.add_argument("--dry-run", action="store_true"); sy.add_argument("--prefer", choices=["local", "server"], help="settle a both-sides-changed conflict this way")

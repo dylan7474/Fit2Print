@@ -24,6 +24,9 @@ Open `http://192.168.50.2:8750/?t=TOKEN` once (the token is in `~/f2p_server/tok
 * phobos's address is `192.168.50.2` today; it is worth giving it a fixed address in the router (a DHCP reservation) so the bookmark keeps working.
 * The Cloudflare tunnel connector still reaches it as `http://localhost:8750`.
 
+## Optional: no token on the home network (`--trust-lan`)
+`fit2print serve --trust-lan` lets a device on the home network (a private address) in without the token, like unprotected apps on the same network. A request that came through a proxy such as the Cloudflare tunnel carries proxy headers (Cf-Ray, X-Forwarded-For ...) and reaches us from this machine, so it is NEVER treated as the home network and still needs the token. It is off by default and **not turned on at phobos** unless the owner says so; to turn it on, add `--trust-lan` to the `ExecStart` line of `~/.config/systemd/user/fit2print.service`, then `systemctl --user daemon-reload && systemctl --user restart fit2print`. Anything on the home network (a guest's phone, a smart TV) could then use the page.
+
 ## The first visit and the token
 Open the page once as `https://YOUR-HOST/?t=TOKEN`; it sets a cookie (HttpOnly, SameSite=Strict) and the token is not needed again on that device.
 Read it on phobos with `cat ~/f2p_server/token`. To change it: write a new one into that file and restart the service.
