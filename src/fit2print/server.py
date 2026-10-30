@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import assistant as assistant_mod, dashboard, hardware as hw_mod, render as render_mod, printer as printer_mod, project
+from . import assistant as assistant_mod, dashboard, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -102,6 +102,16 @@ def hardware_detail(hid, flash=""):
 <div class=card><table style='width:100%;border-collapse:collapse;font-size:14px'><tr style='text-align:left;color:var(--mute)'><th>Dimension (bold = the fit depends on it)</th><th>Published</th><th>Status</th><th>Source</th><th>Your measurement</th></tr>{''.join(rows)}</table></div>
 {('<div class=card><b>Sources</b><ul>' + src + '</ul></div>') if src else ''}
 <style>td,th{{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}}</style>""")
+
+def plate_card(pid, folder, marker):
+    """'Layer preview': the sliced plates this project has on this machine, each a link to the layer-by-layer viewer."""
+    pl = layerview.discover(folder, marker)
+    if not pl:
+        return ""
+    rows = "".join(f"<div class=row style='padding:6px 0;border-top:1px solid var(--line)'><a href='/p/{esc(pid)}/plate/{esc(n)}'><b>{esc(v['part'])}</b></a>"
+                   f"<span class=small>{esc(v['verdict'])} {(' &middot; ' + str(v['minutes']) + ' min') if v.get('minutes') else ''} {(' &middot; ' + str(v['grams']) + ' g') if v.get('grams') else ''}</span></div>"
+                   for n, v in sorted(pl.items()))
+    return f"<div class=card><h3>Layer preview</h3><div class=meta>Step through a sliced plate exactly as the printer will lay it down.</div>{rows}</div>"
 
 RENDER_JOBS = {}
 
@@ -323,7 +333,7 @@ def save_print(folder, marker, fields, files):
     return entry
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    app = None; token = None; printer = None; assistant = None; render_command = None
+    app = None; token = None; printer = None; assistant = None; render_command = None; plates = layerview.Cache()
     def log_message(self, *a): pass
     def _send(self, code, body, ctype="text/html; charset=utf-8", headers=()):
         b = body.encode() if isinstance(body, str) else body
@@ -374,6 +384,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if mh.group(1) not in hw_mod.load_all(): return self._send(404, page("Not found", "<div class=card>No such component.</div>"))
                 return self._send(200, hardware_detail(mh.group(1), qs.get("msg", [""])[0]), headers=hdr)
             m = re.fullmatch(r"/p/([a-z0-9-]+)(/log)?", path)
+            jp = re.fullmatch(r"/p/([a-z0-9-]+)/plate/([a-z0-9_-]{1,60})(?:/(meta\.json|problems\.json|layer/(\d{1,5})\.json))?", path)
+            if jp and jp.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[jp.group(1)]
+                found = layerview.discover(folder, mk).get(jp.group(2))
+                if not found: return self._send(404, page("Not found", "<div class=card>No such plate on this machine.</div>"))
+                if not jp.group(3):
+                    info = f"{esc(found['verdict'])} &middot; {found.get('minutes') or '?'} min &middot; {found.get('grams') or '?'} g &middot; arrow keys step a layer"
+                    return self._send(200, page(found["part"], layerview.viewer_html(jp.group(1), jp.group(2), esc(found["part"]), info)), headers=hdr)
+                try:
+                    pl = self.plates.get(found["path"])
+                except Exception as e:
+                    return self._send(500, json.dumps(dict(error=f"could not read the plate: {e}")), "application/json")
+                if jp.group(3) == "meta.json":
+                    pl.compute_problems(); return self._send(200, json.dumps(pl.meta()), "application/json")
+                if jp.group(3) == "problems.json":
+                    return self._send(200, json.dumps(pl.problems_json()), "application/json", (("Cache-Control", "no-store"),))
+                k = int(jp.group(4))
+                if k >= len(pl.zs): return self._send(404, json.dumps(dict(error="no such layer")), "application/json")
+                return self._send(200, json.dumps(pl.layer(k)), "application/json", (("Cache-Control", "max-age=300"),))
             jr = re.fullmatch(r"/p/([a-z0-9-]+)/renders/([a-z0-9_-]{1,40}\.png)", path)
             if jr and jr.group(1) in self.app.projects():
                 fp = os.path.join(self.app.projects()[jr.group(1)][0], "renders", jr.group(2))
@@ -396,7 +425,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><a class=btn href='/p/{pid}/log'>Log a print</a></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + render_card(pid, folder, mk) + asst + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))

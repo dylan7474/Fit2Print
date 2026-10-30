@@ -7,7 +7,8 @@ NUM = re.compile(r"([XYZEFIJ])(-?\d*\.?\d+)")
 
 def read_gcode(path):
     if path.endswith(".gcode"):
-        return open(path).read().splitlines()
+        with open(path) as f:
+            return f.read().splitlines()
     z = zipfile.ZipFile(path)
     name = next((n for n in z.namelist() if n.startswith("Metadata/plate_") and n.endswith(".gcode")), None)
     if name is None:

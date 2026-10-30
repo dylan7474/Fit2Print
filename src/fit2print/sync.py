@@ -14,13 +14,15 @@ import datetime, hashlib, json, os, shlex, subprocess, tempfile
 
 STATE = ".fit2print-sync.json"
 
-def plan(marker):
+def plan(marker, plates_dir=None):
     if marker.get("adapter") == "phonosphere":
         return dict(append=["PRINT_LOG.jsonl"], text=[], push=["fit2print.toml", "parts_register.py", "PLATE_RESULTS.jsonl", "PARTS_AUDIT.json"])
     push = ["fit2print.toml"]
     m = marker.get("model")                                  # the model the pictures are drawn from, so the server can draw them too
     if isinstance(m, str) and not os.path.isabs(m) and ".." not in m.split("/"):
         push.append(m)
+    plates = [os.path.join("plates", f) for f in os.listdir(plates_dir) if f.endswith((".3mf", ".gcode"))] if plates_dir and os.path.isdir(plates_dir) else []
+    push += plates                                           # the sliced plates, so the server's layer preview can show them
     return dict(append=[os.path.join("records", "plates.jsonl"), os.path.join("records", "prints.jsonl"), os.path.join("records", "assistant.jsonl")],
                 text=["brief.md", "NEXT.md"], push=push)
 
@@ -81,7 +83,7 @@ def merge_log(local_log, remote_log):
 def sync(local, remote, marker, dry=False, prefer=None):
     """-> dict(pulled=log lines pulled, photos_pulled, pushed=[...], text_pulled=[...], text_pushed=[...], conflicts=[...])."""
     local = local.rstrip("/"); remote = remote.rstrip("/")
-    pl = plan(marker)
+    pl = plan(marker, os.path.join(local, "plates"))
     out = dict(pulled=0, photos_pulled=0, pushed=[], text_pulled=[], text_pushed=[], conflicts=[])
     sp = os.path.join(local, STATE)
     state = json.load(open(sp)) if os.path.exists(sp) else {}
