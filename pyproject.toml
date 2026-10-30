@@ -1,0 +1,16 @@
+[project]
+name = "fit2print"
+version = "0.1.0"
+description = "Virtual checks that catch 3D-printing and assembly problems before anything is printed"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy", "trimesh", "pillow"]
+
+[project.scripts]
+fit2print = "fit2print.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

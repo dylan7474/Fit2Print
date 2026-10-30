@@ -1,0 +1,61 @@
+# The picklist: every outside tool Fit2Print can use, what it is for, and what happens without it.
+# `fit2print doctor` reads this and reports which checks can run on this machine.
+
+[[module]]
+name = "numpy"
+required = true
+why = "arrays for every check"
+
+[[module]]
+name = "scipy"
+required = true
+why = "image morphology in the overhang check"
+
+[[module]]
+name = "trimesh"
+required = true
+why = "reading STL/3MF meshes, slicing them"
+
+[[module]]
+name = "PIL"
+pip = "pillow"
+required = true
+why = "drawing layer pictures and reports"
+
+[[module]]
+name = "shapely"
+required = false
+why = "exact 2D shapes; without it Fit2Print uses its own raster slicer (layers.py)"
+
+[[module]]
+name = "networkx"
+required = false
+why = "trimesh's own section/polygon code needs it; Fit2Print's layer slicer does not"
+
+[[module]]
+name = "rtree"
+required = false
+why = "fast ray casts in trimesh; the screw-reach checks use CAD booleans instead"
+
+[[module]]
+name = "manifold3d"
+required = false
+why = "mesh booleans in Python; without it the CAD tool's booleans are used"
+
+[[program]]
+name = "openscad"
+required = false
+why = "geometry engine for assembly sweeps and fixings checks (use the Manifold backend)"
+checks = ["assembly", "fixings", "fit"]
+
+[[program]]
+name = "bambu-studio"
+required = false
+why = "slices to real toolpaths (G-code) for the as-built and unsupported-plastic checks"
+checks = ["toolpath", "asbuilt"]
+
+[[program]]
+name = "prusa-slicer"
+required = false
+why = "an alternative slicer for the same checks"
+checks = ["toolpath", "asbuilt"]
