@@ -1,0 +1,7 @@
+# Project marker (see docs/PROJECTS.md). This is a SAMPLE used to test Fit2Print: it is not a real project and has no repo of its own.
+id = "sample-pizero-case"
+name = "Sample: Pi Zero 2 W wall case"
+kind = "sample"
+adapter = "generic"
+printer_profile = "bambu_a1_pla"
+deliverables = "~/Downloads/fit2print_samples/pizero_case"
