@@ -28,6 +28,6 @@ def init(folder, name, kind="design-and-print", printer_profile="bambu_a1_pla", 
         f'# Project marker (see Fit2Print docs/PROJECTS.md): every Fit2Print command reads this first.\n'
         f'id = "{pid}"\nname = "{name}"\nkind = "{kind}"\nadapter = "generic"\nprinter_profile = "{printer_profile}"\n'
         f'deliverables = "~/Downloads/{pid}"\n# model = "model.scad"     # an STL older than this file is refused as stale\n')
-    write(".gitignore", "stl/\n*.3mf\n*.gcode\n__pycache__/\n")
+    write(".gitignore", "stl/\n*.3mf\n*.gcode\n__pycache__/\nrenders/\n.fit2print-sync.json\n")
     write(os.path.join("records", ".gitkeep"), "")
     return pid, folder

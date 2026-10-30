@@ -122,10 +122,39 @@ def cmd_serve(args):
 
 def cmd_sync(args):
     marker = read_marker(args.project)
-    r = sync.sync(args.project, args.remote, marker, args.dry_run)
+    r = sync.sync(args.project, args.remote, marker, args.dry_run, args.prefer)
     print(("DRY RUN: " if args.dry_run else "") + f"pulled {r['pulled']} log entr{'y' if r['pulled'] == 1 else 'ies'} and {r['photos_pulled']} photo(s) from the server; "
-          f"{'would push' if args.dry_run else 'pushed'} {len(r['pushed'])} file(s) + photos")
-    return 0
+          f"{'would push' if args.dry_run else 'pushed'} {len(r['pushed'])} file(s) + photos; text: pulled {r['text_pulled'] or 'none'}, pushed {r['text_pushed'] or 'none'}")
+    for c in r["conflicts"]:
+        print("CONFLICT: " + c)
+    return 1 if r["conflicts"] else 0
+
+def cmd_sync_all(args):
+    import os
+    from . import server
+    cfg = server.load_config(args.config)
+    root = args.remote.rstrip("/")
+    known, bad = set(), 0
+    folders = list(cfg["projects"])
+    nd = cfg["new_projects_dir"]
+    if os.path.isdir(nd):
+        folders += [os.path.join(nd, d) for d in sorted(os.listdir(nd))]
+    for f in folders:
+        m = server.read_marker(f)
+        if not m or not m.get("id"):
+            continue
+        known.add(m["id"])
+        try:
+            r = sync.sync(f, f"{root}/{m['id']}", m, args.dry_run, args.prefer)
+            print(f"{m['id']:24} pulled {r['pulled']} entries, {r['photos_pulled']} photos; text pulled {r['text_pulled'] or '-'}, pushed {r['text_pushed'] or '-'}")
+            for c in r["conflicts"]:
+                print("  CONFLICT: " + c); bad = 1
+        except Exception as e:
+            print(f"{m['id']:24} FAILED: {e}"); bad = 1
+    if not args.dry_run:
+        for pid in sync.pull_new(root, nd, known):
+            print(f"{pid:24} started on the server: brought home to {os.path.join(nd, pid)}")
+    return bad
 
 def cmd_hardware(args):
     lib = hardware.load_all()
@@ -185,8 +214,11 @@ def main(argv=None):
     sv.add_argument("--printer", default=None, help="printer file, default ~/.config/fit2print/printer.toml"); sv.add_argument("--port", type=int, default=8750); sv.add_argument("--token", default=None, help="required for any address except localhost"); sv.add_argument("--token-file", default=None, help="read the token from this file (keeps it off the command line)")
     sv.set_defaults(fn=cmd_serve)
     sy = s.add_parser("sync", help="keep the server's copy of a project in step with this master copy (pull its new log entries and photos, push the state)")
-    sy.add_argument("project"); sy.add_argument("remote", help="folder, or host:folder over ssh"); sy.add_argument("--dry-run", action="store_true")
+    sy.add_argument("project"); sy.add_argument("remote", help="folder, or host:folder over ssh"); sy.add_argument("--dry-run", action="store_true"); sy.add_argument("--prefer", choices=["local", "server"], help="settle a both-sides-changed conflict this way")
     sy.set_defaults(fn=cmd_sync)
+    sa = s.add_parser("sync-all", help="sync every project in the config with the server, and bring home projects started on the server")
+    sa.add_argument("--remote", required=True, help="the server's projects folder, e.g. phobos:f2p_server/projects"); sa.add_argument("--config", default=None)
+    sa.add_argument("--dry-run", action="store_true"); sa.add_argument("--prefer", choices=["local", "server"]); sa.set_defaults(fn=cmd_sync_all)
     hw = s.add_parser("hardware", help="the component library: list, show, verify (record YOUR measurement), openscad (parameters for a model)")
     hw.add_argument("action", choices=["list", "show", "verify", "openscad"]); hw.add_argument("id", nargs="?"); hw.add_argument("dim", nargs="?"); hw.add_argument("value", nargs="?")
     hw.add_argument("--how", default="callipers"); hw.set_defaults(fn=cmd_hardware)

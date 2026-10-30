@@ -7,12 +7,15 @@
 * **phobos, the assistant:** Claude Code (`~/.local/bin/claude`, already signed in) started by the page in the project's folder with a short allowlist of tools, one of which is the `f2p` wrapper. Nothing else can run.
 * The printer panel is live; the project data is as of the last `sync`.
 
-## Daily use
-    # on the laptop, whenever it is on: bring the phone's new log entries and photos home, push the latest state out
-    fit2print sync ~/src/dylan7474/Phonosphere/cad phobos:f2p_server/projects/phonosphere
-    fit2print sync ~/src/dylan7474/Fit2Print/samples/pizero_case phobos:f2p_server/projects/pizero
-The laptop copy is the master: the server copy only ever ADDS log entries and photos, `sync` pulls those home first, then pushes (nothing on the server is deleted).
-Projects started from the phone page are created on phobos in `projects/new/` and are not synced home yet (pull them with `rsync`; a proper import comes later).
+## Daily use: one command keeps both sides in step
+    fit2print sync-all --remote phobos:f2p_server/projects          # --dry-run to look first
+It syncs every project the laptop knows (its config) and brings home any project that was started on the phone page. Everything on the server lives in `~/f2p_server/projects/<project id>/`.
+What happens to each kind of file (it never overwrites work):
+* **Logs** (print log, check records, the assistant's conversation): merged both ways; each side gains the lines it lacks.
+* **brief.md and NEXT.md** (the assistant on the server edits these, and so do you): if only one side changed since the last sync, that change goes to the other side. If **both** changed, nothing is overwritten: the server's version is saved next to yours as `NEXT.md.from-server-DATE`, the sync reports `CONFLICT`, and you merge them by hand, or settle it with `--prefer local` or `--prefer server`.
+* **Photos:** copied both ways, never overwriting.
+* **The laptop's own files** (the marker, the model, the check records): copied to the server.
+Single project: `fit2print sync PROJECT phobos:f2p_server/projects/<id>`. The laptop copy is the master; run this whenever the laptop is on, the page on phobos keeps working in between.
 
 ## The first visit and the token
 Open the page once as `https://YOUR-HOST/?t=TOKEN`; it sets a cookie (HttpOnly, SameSite=Strict) and the token is not needed again on that device.
