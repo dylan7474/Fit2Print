@@ -384,7 +384,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if mh.group(1) not in hw_mod.load_all(): return self._send(404, page("Not found", "<div class=card>No such component.</div>"))
                 return self._send(200, hardware_detail(mh.group(1), qs.get("msg", [""])[0]), headers=hdr)
             m = re.fullmatch(r"/p/([a-z0-9-]+)(/log)?", path)
-            jp = re.fullmatch(r"/p/([a-z0-9-]+)/plate/([a-z0-9_-]{1,60})(?:/(meta\.json|problems\.json|layer/(\d{1,5})\.json))?", path)
+            jp = re.fullmatch(r"/p/([a-z0-9-]+)/plate/([a-z0-9_-]{1,60})(?:/(meta\.json|problems\.json|mesh\.bin|layer/(\d{1,5})\.json))?", path)
             if jp and jp.group(1) in self.app.projects():
                 folder, mk = self.app.projects()[jp.group(1)]
                 found = layerview.discover(folder, mk).get(jp.group(2))
@@ -400,6 +400,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     pl.compute_problems(); return self._send(200, json.dumps(pl.meta()), "application/json")
                 if jp.group(3) == "problems.json":
                     return self._send(200, json.dumps(pl.problems_json()), "application/json", (("Cache-Control", "no-store"),))
+                if jp.group(3) == "mesh.bin":
+                    if pl.tris is None: return self._send(404, json.dumps(dict(error="this plate has no 3D model (a plain G-code file)")), "application/json")
+                    return self._send(200, pl.mesh_bytes(), "application/octet-stream", (("Cache-Control", "max-age=300"),))
                 k = int(jp.group(4))
                 if k >= len(pl.zs): return self._send(404, json.dumps(dict(error="no such layer")), "application/json")
                 return self._send(200, json.dumps(pl.layer(k)), "application/json", (("Cache-Control", "max-age=300"),))
