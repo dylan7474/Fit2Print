@@ -21,7 +21,7 @@ def init(folder, name, kind="design-and-print", printer_profile="bambu_a1_pla", 
     def write(rel, text):
         with open(os.path.join(folder, rel), "w") as fh:
             fh.write(text)
-    for f in ("CLAUDE.md", "NEXT.md", "brief.md"):
+    for f in ("CLAUDE.md", "NEXT.md", "brief.md", "PLAYBOOK.md"):
         with open(os.path.join(tdir, f)) as fh:
             write(f, fh.read().replace("{name}", name).replace("{printer_profile}", printer_profile))
     write("fit2print.toml",

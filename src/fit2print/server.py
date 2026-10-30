@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import dashboard, printer as printer_mod, project
+from . import assistant as assistant_mod, dashboard, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -37,14 +37,54 @@ def page(title, body, token_note=""):
     return (f"<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>{esc(title)}</title><style>{CSS}</style></head><body>"
             f"<header><div class=logo><a href='/'>Fit<b>2</b>Print</a></div><div class=small>{token_note}</div></header><div class=wrap>{body}</div></body></html>")
 
+def assistant_card(pid, folder, name, a, start=False, desc=""):
+    """The assistant panel for a project page: past messages, a box, and a few lines of script that send a message and poll for the answer."""
+    hist = a.history(folder) if a else []
+    def bubble(role, text):
+        cls = {"you": "me", "assistant": "ai", "error": "err"}.get(role, "ai")
+        return f"<div class='bub {cls}'>{esc(text)}</div>"
+    shown = "".join(bubble(h["role"], h["text"]) for h in hist)
+    def peek(fn, title):
+        p = os.path.join(folder, fn)
+        if not os.path.exists(p): return ""
+        with open(p) as fh: t = fh.read()
+        return f"<details><summary>{title}</summary><pre class=file>{esc(t)}</pre></details>"
+    if a is None:
+        return ("<div class=card><h3>Assistant</h3><div class=note>Not set up on this machine (no <code>claude</code> command found). "
+                "Everything else works without it.</div></div>")
+    first = f"I want to make: {name}. {desc}".strip() + " Please start the scoping stage: read CLAUDE.md, PLAYBOOK.md and brief.md, then ask me what you need to know, a little at a time."
+    auto = "true" if (start and not hist) else "false"
+    return f"""<div class=card id=asst><div class=row><h3>Assistant</h3><span class=small>Claude, working inside this project's own folder</span></div>
+<div id=chat>{shown or "<div class=small>Nothing said yet. Ask a question, or tell it what you want to do next.</div>"}</div>
+<div id=working class=small style='display:none;margin:6px 0'></div>
+<form id=askform style='display:flex;gap:8px;margin-top:10px'><textarea id=msg rows=2 placeholder="Ask or tell the assistant something..." style='flex:1'></textarea><button class=btn id=sendbtn type=submit>Send</button></form>
+{peek("brief.md", "The brief so far")}{peek("NEXT.md", "Where it stands (NEXT.md)")}</div>
+<style>.bub{{border-radius:12px;padding:9px 12px;margin:8px 0;font-size:15px;white-space:pre-wrap}}.ai{{background:#eef0f4;margin-right:34px}}.me{{background:var(--brand);color:#fff;margin-left:34px}}.err{{background:#fde8e8;color:#8a1c1c}}
+@media (prefers-color-scheme:dark){{.ai{{background:#2a2a30}}.err{{background:#3a1d1d;color:#f5b5b5}}}}pre.file{{white-space:pre-wrap;font-size:13px;background:var(--bg);border-radius:8px;padding:10px;max-height:320px;overflow:auto}}details{{margin-top:8px}}</style>
+<script>(function(){{const pid={json.dumps(pid)},chat=document.getElementById('chat'),w=document.getElementById('working'),btn=document.getElementById('sendbtn'),box=document.getElementById('msg');
+const FIRST={json.dumps(first)};
+function add(cls,t){{const d=document.createElement('div');d.className='bub '+cls;d.textContent=t;const e=chat.querySelector('.small');if(e&&!e.className.includes('bub'))e.remove();chat.appendChild(d);d.scrollIntoView({{block:'nearest'}})}}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function ask(msg){{add('me',msg);btn.disabled=true;w.style.display='block';w.textContent='thinking...';
+ const r=await fetch('/p/'+pid+'/ask',{{method:'POST',headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:'message='+encodeURIComponent(msg)}});
+ if(!r.ok){{add('err',await r.text());btn.disabled=false;w.style.display='none';return}}
+ const {{job}}=await r.json();let n=0;
+ for(;;){{const p=await (await fetch('/p/'+pid+'/ask/'+job+'?n='+n)).json();n=p.next;
+  for(const e of p.events){{if(e.kind=='tool')w.textContent=e.text+'...';else if(e.kind=='text')add('ai',e.text);else if(e.kind=='error')add('err',e.text)}}
+  if(p.done)break;await sleep(1000)}}
+ w.style.display='none';btn.disabled=false;}}
+document.getElementById('askform').addEventListener('submit',ev=>{{ev.preventDefault();const m=box.value.trim();if(!m)return;box.value='';ask(m)}});
+if({auto})ask(FIRST);}})();</script>"""
+
 def load_config(path=None):
     path = path or os.path.expanduser("~/.config/fit2print/config.toml")
-    cfg = dict(projects=[], new_projects_dir=os.path.expanduser("~/fit2print-projects"))
+    cfg = dict(projects=[], new_projects_dir=os.path.expanduser("~/fit2print-projects"), assistant={})
     if os.path.exists(path) and tomllib:
         with open(path, "rb") as f:
             d = tomllib.load(f)
         cfg["projects"] = [os.path.expanduser(p) for p in d.get("projects", [])]
         cfg["new_projects_dir"] = os.path.expanduser(d.get("new_projects_dir", cfg["new_projects_dir"]))
+        cfg["assistant"] = d.get("assistant", {})
     return cfg
 
 def read_marker(folder):
@@ -212,7 +252,7 @@ def save_print(folder, marker, fields, files):
     return entry
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    app = None; token = None; printer = None
+    app = None; token = None; printer = None; assistant = None
     def log_message(self, *a): pass
     def _send(self, code, body, ctype="text/html; charset=utf-8", headers=()):
         b = body.encode() if isinstance(body, str) else body
@@ -233,6 +273,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if qs.get("t", [""])[0] == self.token:
             return True, (("Set-Cookie", f"f2p={self.token}; HttpOnly; SameSite=Strict; Path=/"),)
         return False, ()
+    def _first_desc(self, folder):
+        try:
+            with open(os.path.join(folder, "brief.md")) as fh:
+                m = re.search(r"## What it is for\s*\n(.*?)\n\n", fh.read(), re.S)
+            t = m.group(1).strip() if m else ""
+            return "" if t.startswith("(") else t[:400]
+        except OSError:
+            return ""
     def do_GET(self):
         u = urllib.parse.urlparse(self.path); qs = urllib.parse.parse_qs(u.query)
         ok, hdr = self._auth(qs)
@@ -250,6 +298,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._send(503, "the camera is not available", "text/plain")
             if path == "/new": return self._send(200, new_form(), headers=hdr)
             m = re.fullmatch(r"/p/([a-z0-9-]+)(/log)?", path)
+            ja = re.fullmatch(r"/p/([a-z0-9-]+)/ask/([0-9a-f]{12})", path)
+            if ja:
+                r = self.assistant.poll(ja.group(2), int(qs.get("n", ["0"])[0])) if self.assistant else None
+                if r is None: return self._send(404, json.dumps(dict(error="no such job")), "application/json")
+                return self._send(200, json.dumps(r), "application/json", (("Cache-Control", "no-store"),))
             if m:
                 pid = m.group(1)
                 if pid not in self.app.projects(): return self._send(404, page("Not found", "<div class=card>No such project.</div>"))
@@ -257,7 +310,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 folder, mk, data = self.app.load(pid)
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><a class=btn href='/p/{pid}/log'>Log a print</a></div>"
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'>" + bar, 1), headers=hdr)
+                asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'>" + bar + asst, 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))
@@ -287,7 +341,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         b = fh.read().replace("(one paragraph, in the person's words)", desc[:2000], 1)
                     with open(bp, "w") as fh:
                         fh.write(b)
-                return self._redirect(f"/p/{pid}", hdr)
+                return self._redirect(f"/p/{pid}?start=1", hdr)
+            ma = re.fullmatch(r"/p/([a-z0-9-]+)/ask", u.path)
+            if ma and ma.group(1) in self.app.projects():
+                if not self.assistant: return self._send(503, "the assistant is not set up on this machine", "text/plain")
+                pid = ma.group(1); folder, mk = self.app.projects()[pid]
+                msg = urllib.parse.parse_qs(body.decode()).get("message", [""])[0]
+                try:
+                    job = self.assistant.start(pid, folder, mk.get("name", pid), msg)
+                except ValueError as e:
+                    return self._send(400, str(e), "text/plain")
+                except RuntimeError as e:
+                    return self._send(409, str(e), "text/plain")
+                return self._send(200, json.dumps(dict(job=job)), "application/json")
             m = re.fullmatch(r"/p/([a-z0-9-]+)/log", u.path)
             if m and m.group(1) in self.app.projects():
                 pid = m.group(1); folder, mk = self.app.projects()[pid]
@@ -304,8 +370,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
-def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None):
+def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None, assistant=None):
     if host not in ("127.0.0.1", "localhost", "::1") and not token:
         raise SystemExit("listening on a network address needs --token (the page can add files to your projects)")
-    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer
+    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer; Handler.assistant = assistant
     return Server((host, port), Handler)

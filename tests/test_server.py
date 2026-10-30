@@ -112,5 +112,45 @@ class PrinterPanel(unittest.TestCase):
             c = http.client.HTTPConnection("127.0.0.1", port, timeout=10); c.request("GET", "/printer/frame.jpg"); r = c.getresponse(); r.read()
             self.assertEqual(r.status, 404); srv.shutdown(); srv.server_close()
 
+class AssistantPanel(unittest.TestCase):
+    FAKE = [__import__("sys").executable, os.path.join(os.path.dirname(__file__), "fake_claude.py")]
+    def setUp(self):
+        from fit2print import assistant
+        self.d = tempfile.TemporaryDirectory(); project.init(os.path.join(self.d.name, "p1"), "Chat Test")
+        self.a = assistant.Assistant(command=self.FAKE, f2p="fit2print")
+        self.srv = server.make_server(dict(projects=[os.path.join(self.d.name, "p1")], new_projects_dir=os.path.join(self.d.name, "n")), "127.0.0.1", 0, None, None, self.a)
+        self.port = self.srv.server_address[1]; threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+    def tearDown(self): self.srv.shutdown(); self.srv.server_close(); self.d.cleanup()
+    def call(self, method, path, body=None, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10); c.request(method, path, body=body, headers=headers or {}); r = c.getresponse(); t = r.read().decode(); return r.status, t
+    def ask(self, text):
+        data = urllib.parse.urlencode(dict(message=text)).encode()
+        return self.call("POST", "/p/chat-test/ask", data, {"Content-Type": "application/x-www-form-urlencoded", "Content-Length": str(len(data))})
+    def test_the_project_page_has_the_panel(self):
+        s, t = self.call("GET", "/p/chat-test"); self.assertEqual(s, 200); self.assertIn("Assistant", t); self.assertIn("askform", t)
+    def test_ask_and_poll(self):
+        import json as j, time
+        s, t = self.ask("hello"); self.assertEqual(s, 200); job = j.loads(t)["job"]
+        for _ in range(100):
+            p = j.loads(self.call("GET", f"/p/chat-test/ask/{job}?n=0")[1])
+            if p["done"]: break
+            time.sleep(0.05)
+        self.assertTrue(p["done"]); self.assertIn("Which board is it for?", [e["text"] for e in p["events"]])
+    def test_an_empty_message_is_a_400_and_a_busy_assistant_is_a_409(self):
+        self.assertEqual(self.ask("  ")[0], 400)
+    def test_unknown_job_is_404(self):
+        self.assertEqual(self.call("GET", "/p/chat-test/ask/aaaaaaaaaaaa")[0], 404)
+    def test_no_assistant_means_a_plain_note_not_a_broken_page(self):
+        srv = server.make_server(dict(projects=[os.path.join(self.d.name, "p1")], new_projects_dir=self.d.name), "127.0.0.1", 0)
+        port = srv.server_address[1]; threading.Thread(target=srv.serve_forever, daemon=True).start()
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10); c.request("GET", "/p/chat-test"); r = c.getresponse(); t = r.read().decode()
+        self.assertEqual(r.status, 200); self.assertIn("Not set up on this machine", t)
+        c.request("POST", "/p/chat-test/ask", body=b"message=hi", headers={"Content-Type": "application/x-www-form-urlencoded"}); r = c.getresponse(); r.read(); self.assertEqual(r.status, 503)
+        srv.shutdown(); srv.server_close()
+    def test_a_new_project_opens_with_the_assistant_started(self):
+        data = urllib.parse.urlencode(dict(name="Pico Case", desc="snap fit")).encode()
+        s, _ = self.call("POST", "/new", data, {"Content-Type": "application/x-www-form-urlencoded", "Content-Length": str(len(data))})
+        self.assertEqual(s, 303)
+
 if __name__ == "__main__":
     unittest.main()

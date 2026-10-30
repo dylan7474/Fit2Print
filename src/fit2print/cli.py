@@ -98,7 +98,17 @@ def cmd_serve(args):
         print(f"printer panel on: {pc['host']} (the access code is read from the printer file, never printed)")
     else:
         print("no printer set up (no ~/.config/fit2print/printer.toml): the printer panel is off")
-    srv = server.make_server(cfg, args.host, args.port, token, pr)
+    import shutil
+    from . import assistant as assistant_mod
+    ac = cfg.get("assistant", {})
+    cmd = ac.get("command") or ([shutil.which("claude")] if shutil.which("claude") else None)
+    asst = None
+    if cmd and ac.get("enabled", True):
+        asst = assistant_mod.Assistant(command=cmd, model=ac.get("model", "sonnet"), budget_usd=ac.get("budget_usd", 0.75), f2p=ac.get("fit2print", "fit2print"))
+        print(f"assistant on: {' '.join(cmd)} (model {asst.model}, at most ${asst.budget} per message)")
+    else:
+        print("assistant off (no claude command found or disabled in config)")
+    srv = server.make_server(cfg, args.host, args.port, token, pr, asst)
     q = f"?t={token}" if token else ""
     print(f"Fit2Print is at http://{'localhost' if args.host in ('127.0.0.1', 'localhost') else args.host}:{args.port}/{q}   (Ctrl+C to stop)")
     try:
