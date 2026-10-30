@@ -43,3 +43,8 @@ Private for now. Licence to be chosen before anything is shared.
 ## The dashboard
     fit2print dashboard ~/src/dylan7474/Phonosphere/cad --out dashboard.html
 One self-contained page: what needs you, a board of every part by state (not checked / ready / look first / on the printer / printed / failed), and the real print log with your photos. States are worked out from the records, never typed in.
+
+## The front door
+    fit2print serve                      # http://localhost:8750 , the projects listed in ~/.config/fit2print/config.toml
+    fit2print serve --host 0.0.0.0       # on the network (a phone on your wifi): needs a token, made for you if you give none
+Home (your projects, with what needs you), a project's dashboard, **Log a print** (a few words, a result, a photo) and **New project**. Standard library only. The assistant panel is not connected yet. See [docs/mockups](docs/mockups/).

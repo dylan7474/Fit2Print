@@ -18,13 +18,16 @@ def init(folder, name, kind="design-and-print", printer_profile="bambu_a1_pla", 
         raise SystemExit(f"templates not found at {tdir}")
     pid = slug(name)
     os.makedirs(os.path.join(folder, "records"), exist_ok=True)
+    def write(rel, text):
+        with open(os.path.join(folder, rel), "w") as fh:
+            fh.write(text)
     for f in ("CLAUDE.md", "NEXT.md", "brief.md"):
-        text = open(os.path.join(tdir, f)).read().replace("{name}", name).replace("{printer_profile}", printer_profile)
-        open(os.path.join(folder, f), "w").write(text)
-    open(os.path.join(folder, "fit2print.toml"), "w").write(
+        with open(os.path.join(tdir, f)) as fh:
+            write(f, fh.read().replace("{name}", name).replace("{printer_profile}", printer_profile))
+    write("fit2print.toml",
         f'# Project marker (see Fit2Print docs/PROJECTS.md): every Fit2Print command reads this first.\n'
         f'id = "{pid}"\nname = "{name}"\nkind = "{kind}"\nadapter = "generic"\nprinter_profile = "{printer_profile}"\n'
         f'deliverables = "~/Downloads/{pid}"\n# model = "model.scad"     # an STL older than this file is refused as stale\n')
-    open(os.path.join(folder, ".gitignore"), "w").write("stl/\n*.3mf\n*.gcode\n__pycache__/\n")
-    open(os.path.join(folder, "records", ".gitkeep"), "w").write("")
+    write(".gitignore", "stl/\n*.3mf\n*.gcode\n__pycache__/\n")
+    write(os.path.join("records", ".gitkeep"), "")
     return pid, folder

@@ -82,6 +82,23 @@ def cmd_init(args):
     print("  records/         checks, prints and photos are logged here")
     return 0
 
+def cmd_serve(args):
+    import secrets
+    from . import server
+    cfg = server.load_config(args.config)
+    token = args.token
+    if args.host not in ("127.0.0.1", "localhost", "::1") and not token:
+        token = secrets.token_urlsafe(12)
+        print(f"no --token given for a network address: made one for this run: {token}")
+    srv = server.make_server(cfg, args.host, args.port, token)
+    q = f"?t={token}" if token else ""
+    print(f"Fit2Print is at http://{'localhost' if args.host in ('127.0.0.1', 'localhost') else args.host}:{args.port}/{q}   (Ctrl+C to stop)")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("stopped")
+    return 0
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -103,6 +120,10 @@ def main(argv=None):
     i = s.add_parser("init", help="start a new project folder from the template (marker, brief, NEXT.md, AI rules)")
     i.add_argument("folder"); i.add_argument("--name", required=True); i.add_argument("--kind", default="design-and-print"); i.add_argument("--printer-profile", default="bambu_a1_pla")
     i.set_defaults(fn=cmd_init)
+    sv = s.add_parser("serve", help="the front door: a local web app (Home, project, log a print, new project)")
+    sv.add_argument("--config", default=None, help="default ~/.config/fit2print/config.toml"); sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--port", type=int, default=8750); sv.add_argument("--token", default=None, help="required for any address except localhost")
+    sv.set_defaults(fn=cmd_serve)
     a = p.parse_args(argv)
     return a.fn(a)
 
