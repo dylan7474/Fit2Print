@@ -1,5 +1,7 @@
 import http.client, json, os, tempfile, threading, time, unittest
 from fit2print import layerview, project, server
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from test_toolpath import plate as synthetic_plate
 
 class Viewer(unittest.TestCase):

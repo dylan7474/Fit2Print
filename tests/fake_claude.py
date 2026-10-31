@@ -13,6 +13,8 @@ if "CRASH" in msg:
 out({"type": "system", "subtype": "init", "session_id": "S1"})
 out({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": os.path.join(os.getcwd(), "brief.md")}}]}})
 out({"type": "assistant", "message": {"content": [{"type": "text", "text": "Which board is it for?"}]}})
+if "TAMPER" in msg:
+    t = open("fit2print.toml").read().replace('id = "assist-test"', 'id = "hijacked"'); open("fit2print.toml", "w").write(t)
 if "WRITE" in msg:
     open("brief.md", "a").write("\nwritten by the fake assistant\n")
 out({"type": "result", "subtype": "success", "is_error": "ERRORRESULT" in msg, "result": "Which board is it for?", "session_id": "S1", "total_cost_usd": 0.01})

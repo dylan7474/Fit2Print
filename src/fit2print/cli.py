@@ -196,6 +196,17 @@ def cmd_render(args):
         print(f"{'ok  ' if r['ok'] else 'FAIL'}  {r['title']} -> renders/{r['name']}.png" + ("" if r["ok"] else f"  ({r['error']})"))
     return 0
 
+def cmd_stage(args):
+    from . import stage
+    read_marker(args.project)
+    if args.set:
+        stage.set_stage(args.project, args.set, "person")
+    cur = stage.current(args.project)
+    print(f"{' > '.join(('[' + l + ']') if k == cur else l for k, l in stage.STAGES)}")
+    for e in stage.history(args.project)[-5:]:
+        print(f"  {e['at']}  {e['from']} -> {e['to']}  ({e['by']})")
+    return 0
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -232,6 +243,8 @@ def main(argv=None):
     hw.add_argument("--how", default="callipers"); hw.set_defaults(fn=cmd_hardware)
     rn = s.add_parser("render", help="draw pictures of what the design should look like (the project's [[render]] views, from its model)")
     rn.add_argument("project"); rn.set_defaults(fn=cmd_render)
+    st = s.add_parser("stage", help="show a project's stage (--set STAGE to set it directly, e.g. for an established project)")
+    st.add_argument("project"); st.add_argument("--set", choices=[k for k, _ in __import__("fit2print.stage", fromlist=["STAGES"]).STAGES]); st.set_defaults(fn=cmd_stage)
     a = p.parse_args(argv)
     return a.fn(a)
 

@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, ipaddress, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import assistant as assistant_mod, dashboard, guide as guide_mod, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
+from . import assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -74,7 +74,7 @@ async function ask(msg){{add('me',msg);btn.disabled=true;w.style.display='block'
   if(p.done)break;await sleep(1000)}}
  w.style.display='none';btn.disabled=false;}}
 document.getElementById('askform').addEventListener('submit',ev=>{{ev.preventDefault();const m=box.value.trim();if(!m)return;box.value='';ask(m)}});
-if({auto})ask(FIRST);}})();</script>"""
+const stash=sessionStorage.getItem('f2p-start-'+pid);if(stash){{sessionStorage.removeItem('f2p-start-'+pid);ask(stash)}}else if({auto})ask(FIRST);}})();</script>"""
 
 def hardware_list():
     lib = hw_mod.load_all()
@@ -112,6 +112,25 @@ def plate_card(pid, folder, marker):
                    f"<span class=small>{esc(v['verdict'])} {(' &middot; ' + str(v['minutes']) + ' min') if v.get('minutes') else ''} {(' &middot; ' + str(v['grams']) + ' g') if v.get('grams') else ''}</span></div>"
                    for n, v in sorted(pl.items()))
     return f"<div class=card><h3>Layer preview</h3><div class=meta>Step through a sliced plate exactly as the printer will lay it down.</div>{rows}</div>"
+
+def stage_card(pid, folder, a_ok):
+    """The stage strip and the one button that moves the project on. Only the person presses it."""
+    cur = stage_mod.current(folder)
+    i = stage_mod.KEYS.index(cur)
+    chips = "".join(f"<span style='display:inline-block;padding:4px 12px;border-radius:99px;margin:2px 4px 2px 0;font-size:14px;border:1px solid " +
+                    ("var(--blue);background:var(--blue);color:#fff;font-weight:700" if k == cur else ("var(--green);color:var(--green)" if n < i else "var(--line);color:var(--mute)")) + f"'>{n + 1} {lab}</span>"
+                    for n, (k, lab) in enumerate(stage_mod.STAGES))
+    gate = stage_mod.GATE.get(cur)
+    nxt = stage_mod.KEYS[i + 1] if i + 1 < len(stage_mod.KEYS) else None
+    btn = (f"<button class=btn id=gobtn type=button data-to='{nxt}'>{esc(gate)} &rarr;</button>" if gate and nxt else "")
+    back = (f"<button class='btn ghost' id=backbtn type=button data-to='{stage_mod.KEYS[i - 1]}'>&larr; Back to {esc(stage_mod.LABEL[stage_mod.KEYS[i - 1]])}</button>" if i > 0 else "")
+    hint = {"scope": "The assistant is gathering what it needs. When you are happy with the brief, press the button: that is the signal to stop collecting and start designing.",
+            "concept": "The assistant draws a first concept. Say what to change; press the button when you like it."}.get(cur, "")
+    return f"""<div class=card id=stagecard><div class=row><h3>Stage: {esc(stage_mod.LABEL[cur])}</h3><span class=small>only you move it on</span></div><div>{chips}</div>
+{('<div class=small style="margin:8px 0">' + esc(hint) + '</div>') if hint else ''}<div class=actions>{btn}{back}</div></div>
+<script>(function(){{const pid={json.dumps(pid)};for(const id of ['gobtn','backbtn']){{const b=document.getElementById(id);if(!b)continue;
+b.addEventListener('click',async()=>{{b.disabled=true;const r=await fetch('/p/'+pid+'/stage',{{method:'POST',headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:'to='+b.dataset.to}});
+if(!r.ok){{alert(await r.text());b.disabled=false;return}}const d=await r.json();sessionStorage.setItem('f2p-start-'+pid,d.start||'');location.reload()}})}}}})();</script>"""
 
 RENDER_JOBS = {}
 
@@ -312,7 +331,7 @@ def home(app, flash="", pr=None):
         pct = int(100 * s["printed"] / s["total"]) if s["total"] else 0
         needs = f"<div class=needs><b>Needs you:</b> {esc(' &middot; '.join(s['needs'])).replace('&amp;middot;', '&middot;')}</div>" if s["needs"] else ""
         kind = " <span class=small>sample</span>" if m.get("kind") == "sample" else ""
-        cards.append(f"<div class=card><div class=row><div><h3>{esc(m.get('name', pid))}{kind}</h3><div class=meta>{s['total']} parts &middot; {s['printed']} printed</div></div>"
+        cards.append(f"<div class=card><div class=row><div><h3>{esc(m.get('name', pid))}{kind}</h3><div class=meta>Stage: {esc(stage_mod.LABEL[stage_mod.current(folder)])} &middot; {s['total']} parts &middot; {s['printed']} printed</div></div>"
                      f"<span class='chip {s['chip'][1]}'>{s['chip'][0]}</span></div><div class=bar><i style='width:{pct}%'></i></div>{needs}"
                      f"<div class=actions><a class=btn href='/p/{esc(pid)}'>Open project</a><a class='btn ghost' href='/p/{esc(pid)}/log'>Log a print</a></div></div>")
     pc = printer_card(app, pr)
@@ -531,7 +550,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><a class=btn href='/p/{pid}/log'>Log a print</a></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + guide_card(pid, folder) + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))
@@ -579,13 +598,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except RuntimeError as e:
                     return self._send(409, str(e), "text/plain")
                 return self._send(200, json.dumps(dict(started=True)), "application/json")
+            mstage = re.fullmatch(r"/p/([a-z0-9-]+)/stage", u.path)
+            if mstage and mstage.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[mstage.group(1)]
+                to = urllib.parse.parse_qs(body.decode()).get("to", [""])[0]
+                try:
+                    stage_mod.move(folder, to, "person")
+                except ValueError as e:
+                    return self._send(400, str(e), "text/plain")
+                return self._send(200, json.dumps(dict(stage=to, start=stage_mod.START.get(to, "") if self.assistant and stage_mod.KEYS.index(to) > 0 else "")), "application/json")
             ma = re.fullmatch(r"/p/([a-z0-9-]+)/ask", u.path)
             if ma and ma.group(1) in self.app.projects():
                 if not self.assistant: return self._send(503, "the assistant is not set up on this machine", "text/plain")
                 pid = ma.group(1); folder, mk = self.app.projects()[pid]
                 msg = urllib.parse.parse_qs(body.decode()).get("message", [""])[0]
                 try:
-                    job = self.assistant.start(pid, folder, mk.get("name", pid), msg)
+                    job = self.assistant.start(pid, folder, mk.get("name", pid), msg, stage_mod.current(folder))
                 except ValueError as e:
                     return self._send(400, str(e), "text/plain")
                 except RuntimeError as e:
