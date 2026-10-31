@@ -52,6 +52,8 @@ def build(folder, marker, command=None, timeout=300):
     if not model or os.path.isabs(model) or ".." in model.split("/") or not os.path.exists(os.path.join(folder, model)):
         raise ValueError("the project's marker needs model = \"file.scad\" (a file inside the project) to build the 3D view")
     cmd = command or [shutil.which("openscad") or "openscad"]
+    from . import render as _render
+    _render._hardware_scad(folder, marker)
     out = dir3d(folder); os.makedirs(out, exist_ok=True)
     res, kept = [], {}
     for p in pieces(marker):

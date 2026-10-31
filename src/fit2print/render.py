@@ -23,6 +23,14 @@ def views(marker):
         out.append(dict(name=v["name"], title=v.get("title", v["name"]), part=str(v.get("part", "assembly")), angle=[float(x) for x in a]))
     return out
 
+def _hardware_scad(folder, marker):
+    """Keep hardware.scad (the library parts the model includes) current with the library and the person's measurements."""
+    try:
+        from . import hardware
+        hardware.write_project_scad(folder, marker)
+    except Exception:
+        pass                                    # a broken library entry must not stop the pictures
+
 def renders_dir(folder):
     return os.path.join(folder, "renders")
 
@@ -49,6 +57,7 @@ def render(folder, marker, command=None, size=(1100, 720), timeout=300):
         raise ValueError(f"model file not found: {model}")
     cmd = command or [shutil.which("openscad") or "openscad"]
     os.makedirs(renders_dir(folder), exist_ok=True)
+    _hardware_scad(folder, marker)
     res = []
     for v in views(marker):
         out = os.path.join(renders_dir(folder), v["name"] + ".png")

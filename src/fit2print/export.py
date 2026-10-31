@@ -46,6 +46,8 @@ def export(folder, marker, command=None, timeout=300):
     if not ps:
         raise ValueError("nothing to export: add an [[export]] table (name, part) to fit2print.toml for each printable piece")
     cmd = command or [shutil.which("openscad") or "openscad"]
+    from . import render as _render
+    _render._hardware_scad(folder, marker)
     os.makedirs(os.path.join(folder, "stl"), exist_ok=True)
     drawn, res = {}, {}
     for p in ps:

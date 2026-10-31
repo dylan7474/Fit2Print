@@ -25,4 +25,8 @@ into `renders/3d/` as raw float32 triangles plus a `meta.json`; the browser draw
     scene = "assembled"         # or "exploded"
 
 With no `[[model3d]]` tables the view is the model's `part = "assembly"` and `part = "exploded"`, each in one colour. A piece OpenSCAD cannot draw is left out and
-reported (the others still show). Z is up. The component panel (dimensions and UNVERIFIED flags beside the 3D view) is the next step.
+reported (the others still show). Z is up. The "Components it uses" card lists the library parts in `components = ["id", ...]`.
+
+### Using library parts in a model (hardware.scad)
+
+When the marker lists `components`, `fit2print render` (and the 3D build and `export`) write `hardware.scad` into the project from the component library: each part's dimensions as variables (the person's measurement where there is one, otherwise the published figure, each tagged MEASURED or UNVERIFIED) and a module per piece plus `<id_with_underscores>_shape()` for the whole part, in the part's own frame, z up. A model does `include <hardware.scad>` and draws `translate([...]) esp32_devkitc_v4_shape();`. The file is regenerated every time, so measuring a size in the library changes the model; do not edit it.

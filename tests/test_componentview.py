@@ -92,3 +92,22 @@ class Panel(unittest.TestCase):
         c = server.components_card(dict(components=["pi-zero-2-w", "no-such-part"]))
         self.assertIn("Raspberry Pi Zero 2 W", c); self.assertIn("to measure", c); self.assertIn("/hardware/pi-zero-2-w", c); self.assertIn("3D shape", c)
         self.assertIn("not in the component library", c)                    # NEGATIVE CONTROL: an unknown id is flagged, not silently dropped
+
+@unittest.skipUnless(OPENSCAD, "needs OpenSCAD")
+class HardwareScad(unittest.TestCase):
+    def test_a_model_can_include_the_library_parts(self):
+        with tempfile.TemporaryDirectory() as d:
+            marker = dict(components=["raspberry-pi-3-b-plus", "esp32-devkitc-v4", "no-such-part"])
+            path = hardware.write_project_scad(d, marker); text = open(path).read()
+            self.assertIn("raspberry_pi_3_b_plus_shape()", text); self.assertIn("esp32_devkitc_v4_shape()", text); self.assertIn("NOT IN THE COMPONENT LIBRARY", text)   # an unknown id is said out loud
+            self.assertIn("UNVERIFIED", text)
+            open(os.path.join(d, "m.scad"), "w").write("include <hardware.scad>\nraspberry_pi_3_b_plus_shape();\ntranslate([100,0,0]) esp32_devkitc_v4_shape();\n")
+            r = subprocess.run([OPENSCAD, "-q", "--backend=manifold", "-o", os.path.join(d, "o.stl"), os.path.join(d, "m.scad")], capture_output=True, text=True, cwd=d)
+            self.assertEqual(r.returncode, 0, r.stderr); import trimesh
+            m = trimesh.load(os.path.join(d, "o.stl"), force="mesh"); self.assertGreater(m.volume, 1000); self.assertGreater(m.bounds[1][0], 140)   # both parts are there
+    def test_no_components_no_file(self):
+        with tempfile.TemporaryDirectory() as d: self.assertIsNone(hardware.write_project_scad(d, {})); self.assertEqual(os.listdir(d), [])
+    def test_a_measurement_changes_the_numbers_in_the_file(self):
+        lib = json.loads(json.dumps(hardware.load_all())); lib["esp32-devkitc-v4"]["dim"]["pcb_length"]["measured"] = dict(value=49.0, on="2026-10-31", how="callipers")
+        text, _ = hardware.project_scad(dict(components=["esp32-devkitc-v4"]), lib)
+        self.assertIn("esp32_devkitc_v4_pcb_length = 49.0;   // mm, MEASURED by you", text)

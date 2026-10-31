@@ -159,6 +159,51 @@ def shape_scad(p):
         return f"{at} cylinder(d={p['d']:.4f},h={p['h']:.4f},$fn=64);"
     return f"{at} cylinder(d1={p['d1']:.4f},d2={p['d2']:.4f},h={p['h']:.4f},$fn=64);"
 
+def ident(s):
+    """An OpenSCAD name from a library id or a piece name."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", s)
+
+def component_scad(entry):
+    """OpenSCAD for one component: its dimensions as variables (measured values where there are any) and a module for every piece and one for the whole
+    thing, all in the component's own frame with z up (see the component's note for where its origin is)."""
+    pre = ident(entry["id"]); out = [f"// ---- {entry.get('name', entry['id'])}  (library id: {entry['id']})"]
+    note = (entry.get("shape") or {}).get("note")
+    if note: out.append(f"// {note}")
+    for k, d in entry.get("dim", {}).items():
+        tag = "MEASURED by you" if is_verified(d) else f"UNVERIFIED ({d['basis']})"
+        out.append(f"{pre}_{k} = {value(d)};   // {d.get('unit', 'mm')}, {tag}")
+    parts = shape_parts(entry)
+    for p in parts:
+        out.append(f"module {pre}_{ident(p['name'])}() color(\"{p['colour']}\") {{ {shape_scad(p)} }}   // {p['label']} [{p['status']}]")
+    out.append(f"module {pre}_shape() {{ " + " ".join(f"{pre}_{ident(p['name'])}();" for p in parts) + " }")
+    return "\n".join(out) + "\n"
+
+def project_scad(marker, lib=None):
+    """The text of hardware.scad for a project: every library component the marker lists in `components`. -> (text, [ids not in the library])"""
+    lib = lib or load_all(); missing = []
+    out = ["// hardware.scad: WRITTEN BY Fit2Print from the component library, again every time the pictures or the 3D view are drawn. DO NOT EDIT: change the",
+           "// library (measure a size) instead. Use it with  include <hardware.scad>  and draw a real part with  <id with _ for ->_shape();  e.g. esp32_devkitc_v4_shape();",
+           "// Every part is in its own frame (see its note); translate and rotate it where the design needs it. Never draw a library part as a plain box.", ""]
+    for i in (marker.get("components") or []):
+        e = lib.get(str(i))
+        if e is None:
+            missing.append(str(i)); out.append(f"// {i}: NOT IN THE COMPONENT LIBRARY: add it, never use numbers from memory"); continue
+        if (e.get("shape") or {}).get("part"):
+            out.append(component_scad(e))
+        else:
+            out.append(f"// {i}: in the library but it has no 3D shape yet (use hardware.openscad() style parameters)\n" + openscad(e))
+    return "\n".join(out), missing
+
+def write_project_scad(folder, marker, lib=None):
+    """Write <folder>/hardware.scad when the marker lists components. -> the path, or None."""
+    if not marker.get("components"):
+        return None
+    text, _ = project_scad(marker, lib)
+    path = os.path.join(folder, "hardware.scad"); tmp = path + ".part"
+    with open(tmp, "w") as f: f.write(text)
+    os.replace(tmp, path)
+    return path
+
 def openscad(entry):
     """OpenSCAD parameter lines for a model to include: the measured value where there is one, and a comment saying what each number rests on."""
     pre = entry["id"].replace("-", "_")
