@@ -353,9 +353,11 @@ def home(app, flash="", pr=None):
         cards.append(f"<div class=card><div class=row><div><h3>{esc(m.get('name', pid))}{kind}</h3><div class=meta>Stage: {esc(stage_mod.LABEL[stage_mod.current(folder)])} &middot; {s['total']} parts &middot; {s['printed']} printed</div></div>"
                      f"<span class='chip {s['chip'][1]}'>{s['chip'][0]}</span></div><div class=bar><i style='width:{pct}%'></i></div>{needs}"
                      f"<div class=actions><a class=btn href='/p/{esc(pid)}'>Open project</a><a class='btn ghost' href='/p/{esc(pid)}/log'>Log a print</a></div></div>")
-    arch = (f"<details class=card><summary>Archived projects ({len(archived)})</summary>{''.join(archived)}</details>" if archived else "")
+    arch = (f"<details class=card id=archived><summary>Archived projects ({len(archived)})</summary>{''.join(archived)}</details>"
+            "<script>function openArchived(){var d=document.getElementById('archived');if(d&&location.hash==='#archived'){d.open=true;d.scrollIntoView()}}openArchived();addEventListener('hashchange',openArchived)</script>" if archived else "")
+    arch_link = f"<p class=small><a href='#archived'>Archived projects ({len(archived)})</a></p>" if archived else ""
     pc = printer_card(app, pr)
-    body = (f"{('<div class=flash>' + esc(flash) + '</div>') if flash else ''}<div class=row><div><h1>Your projects</h1><p class=sub>From an idea to a print, checked before anything is wasted.</p></div>"
+    body = (f"{('<div class=flash>' + esc(flash) + '</div>') if flash else ''}<div class=row><div><h1>Your projects</h1><p class=sub>From an idea to a print, checked before anything is wasted.</p>{arch_link}</div>"
             f"<a class=btn href='/new'>+ New project</a></div>"
             + (f"<div style='display:grid;grid-template-columns:2fr 1fr;gap:18px' class=twocol><div>{''.join(cards) or '<div class=card>No projects yet. Start one.</div>'}{arch}</div><div>{pc}</div></div>"
                "<style>@media(max-width:850px){.twocol{grid-template-columns:1fr!important}}</style>" if pc else ("".join(cards) or "<div class=card>No projects yet. Start one.</div>") + arch))

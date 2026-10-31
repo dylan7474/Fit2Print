@@ -14,7 +14,8 @@ class Archive(unittest.TestCase):
     def test_archiving_hides_it_from_home_and_restore_brings_it_back(self):
         self.assertIn("Arch Test", self.call("GET", "/")[1]); self.assertEqual(self.act("archive"), 303)
         t = self.call("GET", "/")[1]; self.assertIn("Archived projects (1)", t); self.assertIn("Restore", t)
-        self.assertEqual(self.act("restore"), 303); self.assertNotIn("Archived projects", self.call("GET", "/")[1])
+        self.assertIn("href='#archived'", t); self.assertIn("id=archived", t)      # a visible link at the top that opens the list
+        self.assertEqual(self.act("restore"), 303); self.assertNotIn("Archived projects", self.call("GET", "/")[1]); self.assertNotIn("#archived", self.call("GET", "/")[1])
     def test_nothing_is_deleted(self):
         self.act("archive"); self.assertTrue(os.path.exists(os.path.join(self.f, "brief.md"))); self.assertEqual(self.call("GET", "/p/arch-test")[0], 200)
         self.assertIn("This project is archived", self.call("GET", "/p/arch-test")[1])
