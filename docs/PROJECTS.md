@@ -9,3 +9,20 @@ different things and must never share files.
 4. **Memory is per project:** one notes file per project, indexed separately, so a session about one does not read the other's state as its own.
 5. **The tool repo holds no real project's data.** Fit2Print contains code, profiles, docs and tests. Real projects (the Phonosphere radio) live in their own repos, and tests that need their files skip when they are absent. The one exception is **samples** under `samples/`: small made-up projects built only to test the tool, marked `kind = "sample"`, each in its own folder with its own marker and its own output folder.
 6. **Naming:** parts, plates and files that could collide are prefixed or live in the project's own folder (the radio's `back_lower_R` and the case's `base` can both exist).
+
+
+## The 3D model view ([[model3d]], added 2026-10-31)
+
+The page shows the project's model as a mesh you can turn (drag), zoom (scroll or pinch), hide part by part (tick boxes) and switch between "Assembled" and
+"Pulled apart". Each piece of the model is a `[[model3d]]` table in the marker; `fit2print render PROJECT` (and the page's "Draw again") draws them with OpenSCAD
+into `renders/3d/` as raw float32 triangles plus a `meta.json`; the browser draws them with WebGL, no library.
+
+    [[model3d]]
+    name = "display"            # letters, digits, - and _
+    label = "LED display"       # what the person sees
+    part = "display"            # the model's `part` value that draws just this piece IN PLACE (not laid flat like an [[export]])
+    colour = "#3A7BD5"
+    scene = "assembled"         # or "exploded"
+
+With no `[[model3d]]` tables the view is the model's `part = "assembly"` and `part = "exploded"`, each in one colour. A piece OpenSCAD cannot draw is left out and
+reported (the others still show). Z is up. The component panel (dimensions and UNVERIFIED flags beside the 3D view) is the next step.

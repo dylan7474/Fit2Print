@@ -1,6 +1,6 @@
 """fit2print command line."""
 import argparse, sys
-from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync, hardware, render as render_mod, export as export_mod
+from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync, hardware, render as render_mod, export as export_mod, modelview
 from .settings import Settings
 
 def cmd_doctor(args):
@@ -206,6 +206,8 @@ def cmd_render(args):
     marker = read_marker(args.project)
     for r in render_mod.render(args.project, marker):
         print(f"{'ok  ' if r['ok'] else 'FAIL'}  {r['title']} -> renders/{r['name']}.png" + ("" if r["ok"] else f"  ({r['error']})"))
+    for r in modelview.build(args.project, marker):
+        print(f"{'ok  ' if r['ok'] else 'skip'}  3D view: {r['name']}" + ("" if r["ok"] else f"  ({r['error']})"))
     return 0
 
 def cmd_stage(args):

@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, ipaddress, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import archive as archive_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
+from . import archive as archive_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -181,12 +181,17 @@ def start_render(pid, folder, marker, command):
     j = RENDER_JOBS.get(pid)
     if j and j.get("running"):
         raise RuntimeError("it is already drawing")
-    RENDER_JOBS[pid] = job = dict(running=True, error="", results=[])
+    RENDER_JOBS[pid] = job = dict(running=True, error="", warn="", results=[])
     def run():
         try:
             job["results"] = render_mod.render(folder, marker, command)
             bad = [r for r in job["results"] if not r["ok"]]
             job["error"] = f"{len(bad)} picture(s) could not be drawn: {bad[0]['error']}" if bad else ""
+            try:
+                bad3 = [r for r in modelview.build(folder, marker, command) if not r["ok"] and r["name"] != "exploded"]
+                if bad3: job["warn"] = f"the 3D view could not draw {bad3[0]['name']}: {bad3[0]['error']}"
+            except Exception as e:                       # the 3D view is extra: it must never break drawing the pictures
+                job["warn"] = f"the 3D view could not be built: {e}"
         except Exception as e:
             job["error"] = str(e)
         job["running"] = False
@@ -570,6 +575,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not os.path.isfile(fp): return self._send(404, "no such picture", "text/plain")
                 ct = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "svg": "image/svg+xml"}[jc.group(2).rsplit(".", 1)[1]]
                 with open(fp, "rb") as fh: return self._send(200, fh.read(), ct, (("Cache-Control", "no-cache"), ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")))
+            jm = re.fullmatch(r"/p/([a-z0-9-]+)/model3d/(meta\.json|[a-z0-9_-]{1,40}\.bin)", path)
+            if jm and jm.group(1) in self.app.projects():
+                fp = os.path.join(modelview.dir3d(self.app.projects()[jm.group(1)][0]), jm.group(2))
+                if not os.path.isfile(fp): return self._send(404, "the 3D view has not been built yet", "text/plain")
+                with open(fp, "rb") as fh: return self._send(200, fh.read(), "application/json" if fp.endswith(".json") else "application/octet-stream", (("Cache-Control", "max-age=300"),))
             jr = re.fullmatch(r"/p/([a-z0-9-]+)/renders/([a-z0-9_-]{1,40}\.png)", path)
             if jr and jr.group(1) in self.app.projects():
                 fp = os.path.join(self.app.projects()[jr.group(1)][0], "renders", jr.group(2))
@@ -578,7 +588,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             js = re.fullmatch(r"/p/([a-z0-9-]+)/render/status", path)
             if js and js.group(1) in self.app.projects():
                 j = RENDER_JOBS.get(js.group(1), dict(running=False, error=""))
-                return self._send(200, json.dumps(dict(running=j["running"], error=j["error"])), "application/json", (("Cache-Control", "no-store"),))
+                return self._send(200, json.dumps(dict(running=j["running"], error=j["error"], warn=j.get("warn", ""))), "application/json", (("Cache-Control", "no-store"),))
             ja = re.fullmatch(r"/p/([a-z0-9-]+)/ask/([0-9a-f]{12})", path)
             if ja:
                 r = self.assistant.poll(ja.group(2), int(qs.get("n", ["0"])[0])) if self.assistant else None
@@ -592,7 +602,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><span><a class=btn href='/p/{pid}/log'>Log a print</a> {archive_button(pid, folder, mk)}</span></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + modelview.card(pid, folder) + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))
