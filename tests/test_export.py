@@ -37,5 +37,31 @@ class Export(unittest.TestCase):
     def test_missing_openscad_is_explained(self):
         r = export.export(self.f, self.m, ["/no/such/openscad"]); self.assertIn("not installed", r[0]["error"])
 
+class Groups(Export):
+    def setUp(self):
+        super().setUp()
+        self.fake2 = os.path.join(self.d.name, "openscad2")
+        open(self.fake2, "w").write(FAKE.replace("trimesh.creation.box(extents=(20, 10, 6)); m.apply_translation((50, 70, -3))",
+            "trimesh.creation.box(extents=((20, 6, 6) if 'body' in part else (4, 4, 2))); m.apply_translation((50, 70, -3) if 'body' in part else (53, 70, 2))").format(py=sys.executable))
+        os.chmod(self.fake2, 0o755)
+        self.g = dict(model="model.scad", export=[dict(name="body", part="body", group="duo", colour="#111111"), dict(name="dot", part="dot", group="duo", colour="#ffffff")])
+    def test_a_group_is_placed_as_one_so_a_piece_keeps_its_place_in_the_other(self):
+        r = export.export(self.f, self.g, [self.fake2]); self.assertTrue(all(x["ok"] for x in r))
+        body = trimesh.load(os.path.join(self.f, "stl", "body.stl")); dot = trimesh.load(os.path.join(self.f, "stl", "dot.stl"))
+        lo = min(body.bounds[0][2], dot.bounds[0][2]); self.assertAlmostEqual(lo, 0, places=4)           # the group sits on the bed
+        self.assertAlmostEqual(dot.bounds[0][2] - body.bounds[0][2], 7.0, places=3)                       # 7 mm above the body's foot, as drawn (1 - -6)
+        self.assertAlmostEqual(dot.centroid[0] - body.centroid[0], 3.0, places=3)                          # 3 mm to the side, as drawn
+    def test_a_piece_alone_is_still_centred_on_its_own(self):                                              # the old behaviour, unchanged
+        r = export.export(self.f, dict(self.g, export=[dict(name="body", part="body"), dict(name="dot", part="dot")]), [self.fake2])
+        dot = trimesh.load(os.path.join(self.f, "stl", "dot.stl")); self.assertAlmostEqual(dot.bounds[0][2], 0, places=4); self.assertAlmostEqual(float(dot.centroid[0]), 0, places=3)
+    def test_one_bad_member_fails_the_whole_group_and_writes_nothing(self):                               # NEGATIVE CONTROL
+        r = export.export(self.f, dict(self.g, export=[dict(name="body", part="body", group="duo"), dict(name="dot", part="NOTHING", group="duo")]), [self.fake2])
+        self.assertFalse(r[0]["ok"]); self.assertFalse(r[1]["ok"]); self.assertIn("same group", r[0]["error"]); self.assertEqual(os.listdir(os.path.join(self.f, "stl")), [])
+    def test_bad_colours_and_group_names_are_refused(self):
+        for bad in (dict(colour="red"), dict(colour="#12345"), dict(group="../x")):
+            with self.assertRaises(ValueError): export.pieces(dict(export=[dict(name="a", **bad)]))
+    def test_groups_lists_the_pieces(self):
+        self.assertEqual([p["name"] for p in export.groups(self.g)["duo"]], ["body", "dot"])
+
 if __name__ == "__main__":
     unittest.main()

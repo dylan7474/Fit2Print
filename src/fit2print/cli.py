@@ -64,6 +64,18 @@ def cmd_plate(args):
     marker = read_marker(args.project) if args.project else {}
     src = [os.path.join(args.project, s) for s in ([marker["model"]] if isinstance(marker.get("model"), str) else marker.get("model", []))] if args.project else None
     bad = 0
+    if not args.stl and not args.group:
+        print("plate needs an STL file, or --group NAME"); return 1
+    if args.group:
+        if not args.project:
+            print("plate --group needs --project"); return 1
+        r = plate.make_group(args.project, marker, args.group, args.out, cfg)
+        print(f"{r['part']:24} {r['verdict']:6} {r['minutes']} min {r['grams']} g -> {r['file']}")
+        for n, f in r["filaments"].items():
+            print(f"      filament {n} {f['colour']}: {', '.join(f['pieces'])}")
+        for n in r["notes"]:
+            print("      " + n)
+        return 1 if r["verdict"] == "BLOCK" else 0
     for stl in args.stl:
         r = plate.make(stl, args.out, cfg, filament=args.filament, source=src, project=args.project)
         print(f"{r['part']:24} {r['verdict']:6} {r['minutes']} min {r['grams']} g -> {r['file']}")
@@ -236,7 +248,7 @@ def main(argv=None):
     d.add_argument("project", help="the Phonosphere cad/ folder"); d.add_argument("--out", default="dashboard.html")
     d.set_defaults(fn=cmd_dashboard)
     pl = s.add_parser("plate", help="slice an STL with Bambu Studio and judge the toolpaths (parts that print without supports)")
-    pl.add_argument("stl", nargs="+"); pl.add_argument("--out", required=True); pl.add_argument("--project", default=None, help="project folder: records the result, and refuses an STL older than its model")
+    pl.add_argument("stl", nargs="*"); pl.add_argument("--group", default=None, help="slice the [[export]] pieces of this group as one multi-colour plate (needs --project)"); pl.add_argument("--out", required=True); pl.add_argument("--project", default=None, help="project folder: records the result, and refuses an STL older than its model")
     pl.add_argument("--filament", default="pla_black"); pl.add_argument("--profile", default=None)
     pl.set_defaults(fn=cmd_plate)
     i = s.add_parser("init", help="start a new project folder from the template (marker, brief, NEXT.md, AI rules)")

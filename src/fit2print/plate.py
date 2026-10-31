@@ -7,7 +7,7 @@
 Still in Phonosphere's make_plate.py and to come: painting supports under shelves, the as-built comparison, flipped print orientations.
 """
 import datetime, hashlib, json, os, shutil, subprocess, tempfile
-from . import gcode, toolpath
+from . import export as export_mod, gcode, multicolour, toolpath
 from .settings import ROOT, Settings
 
 PROFILES = os.path.join(ROOT, "profiles", "bambu_a1")
@@ -24,13 +24,17 @@ def check_fresh(stl, source):
     return None
 
 def slice_stl(stl, outdir, filament="pla_black", profiles=PROFILES, name=None):
-    """Run Bambu Studio on one STL. -> (path of the sliced 3MF, result dict from the slicer)."""
+    """Run Bambu Studio on one STL (or on a ready-made project .3mf, whose own filaments are kept). -> (path of the sliced 3MF, result dict from the slicer)."""
     name = name or os.path.splitext(os.path.basename(stl))[0]
     os.makedirs(outdir, exist_ok=True)
     with tempfile.TemporaryDirectory() as d:
-        cmd = ["bambu-studio", "--load-settings", f"{profiles}/machine.json;{profiles}/process_0.28_manual_support.json",
-               "--load-filaments", f"{profiles}/{filament}.json", "--arrange", "1", "--orient", "0", "--slice", "0",
-               "--outputdir", d, "--export-3mf", name + ".3mf", os.path.abspath(stl)]
+        if stl.endswith(".3mf"):
+            cmd = ["bambu-studio", "--load-settings", f"{profiles}/machine.json;{profiles}/process_0.28_manual_support.json", "--slice", "0",
+                   "--outputdir", d, "--export-3mf", name + ".3mf", os.path.abspath(stl)]
+        else:
+            cmd = ["bambu-studio", "--load-settings", f"{profiles}/machine.json;{profiles}/process_0.28_manual_support.json",
+                   "--load-filaments", f"{profiles}/{filament}.json", "--arrange", "1", "--orient", "0", "--slice", "0",
+                   "--outputdir", d, "--export-3mf", name + ".3mf", os.path.abspath(stl)]
         subprocess.run(cmd, capture_output=True, timeout=1800)
         rj = os.path.join(d, "result.json")
         if not os.path.exists(rj):
@@ -50,6 +54,34 @@ def make(stl, outdir, cfg=None, filament="pla_black", source=None, project=None,
     if stale:
         raise SystemExit("REFUSED: " + stale)
     dest, plate = slice_stl(stl, outdir, filament, profiles, name)
+    return _judge(dest, plate, name, cfg, stl, project)
+
+def make_group(folder, marker, group, outdir, cfg=None, profiles=PROFILES):
+    """Slice the pieces of one [[export]] group as ONE multi-colour plate (each piece in its own filament). -> the same dict as make()."""
+    cfg = cfg or Settings.load()
+    ps = export_mod.groups(marker).get(group)
+    if not ps:
+        raise SystemExit(f"REFUSED: the project has no [[export]] group called {group!r}")
+    src = [os.path.join(folder, marker["model"])] if isinstance(marker.get("model"), str) else None
+    stls = []
+    for p in ps:
+        f = os.path.join(folder, "stl", p["name"] + ".stl")
+        if not os.path.exists(f):
+            raise SystemExit(f"REFUSED: stl/{p['name']}.stl is missing (run the export first)")
+        stale = check_fresh(f, src)
+        if stale:
+            raise SystemExit("REFUSED: " + stale)
+        stls.append(f)
+    nums, colours = multicolour.slots(ps)
+    with tempfile.TemporaryDirectory() as d:
+        proj = os.path.join(d, group + ".3mf")
+        multicolour.write_3mf(proj, group, [(p["name"], multicolour.load_mesh(f), n) for p, f, n in zip(ps, stls, nums)], colours)
+        dest, plate = slice_stl(proj, outdir, profiles=profiles, name=group)
+    rec = _judge(dest, plate, group, cfg, stls, folder)
+    rec["filaments"] = {str(n): dict(colour=colours[n], pieces=[p["name"] for p, k in zip(ps, nums) if k == n]) for n in colours}
+    return rec
+
+def _judge(dest, plate, name, cfg, stl, project):
     layers, _, _ = gcode.parse(gcode.read_gcode(dest), cfg.filament_area)
     supports = sum(1 for segs in layers.values() for f, s, _ in segs if f.startswith("Support"))
     v, lines = toolpath.report(layers, cfg)
@@ -58,7 +90,7 @@ def make(stl, outdir, cfg=None, filament="pla_black", source=None, project=None,
         notes.append(f"{supports} support segments were built where none were painted (they would fill holes): look at the plate")
         v = "CHECK" if v == "PASS" else v
     rec = dict(date=datetime.date.today().isoformat(), part=name, verdict=v, minutes=round(plate["total_predication"] / 60),
-               grams=round(sum(f["total_used_g"] for f in plate["filaments"])), notes=notes, file=dest, stl_sha=sha(stl), profile=cfg.name)
+               grams=round(sum(f["total_used_g"] for f in plate["filaments"])), notes=notes, file=dest, stl_sha=sha(stl) if isinstance(stl, str) else "+".join(sha(x) for x in stl), profile=cfg.name)
     if project:
         os.makedirs(os.path.join(project, "records"), exist_ok=True)
         with open(os.path.join(project, "records", "plates.jsonl"), "a") as f:

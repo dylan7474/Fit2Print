@@ -46,8 +46,9 @@ def _tf(txt):
     v = [float(x) for x in txt.split()] if txt else [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]
     return np.array([[v[0], v[3], v[6], v[9]], [v[1], v[4], v[7], v[10]], [v[2], v[5], v[8], v[11]], [0, 0, 0, 1]], float)
 
-def mesh_triangles(path, limit=400_000):
-    """The part(s) of a sliced .3mf as triangles in the BED's coordinates (the same as the G-code's): float array (n, 3, 3). None for a plain .gcode."""
+def mesh_triangles(path, limit=400_000, with_filament=False):
+    """The part(s) of a sliced .3mf as triangles in the BED's coordinates (the same as the G-code's): float array (n, 3, 3). None for a plain .gcode.
+    With_filament: (triangles, filament per triangle counted from 0, from each part's `extruder` in the project's model_settings.config)."""
     if not path.endswith(".3mf"):
         return None
     z = zipfile.ZipFile(path)
@@ -65,12 +66,18 @@ def mesh_triangles(path, limit=400_000):
             else:
                 out[o.get("id")] = ("components", [(c.get("{%s}path" % ns["p"]), c.get("objectid"), _tf(c.get("transform"))) for c in o.findall("m:components/m:component", ns)])
         return out
-    main = parse("3D/3dmodel.model"); objs = meshes_of(main); tris = []
+    ext = {}
+    if "Metadata/model_settings.config" in z.namelist():
+        for part in ET.fromstring(z.read("Metadata/model_settings.config")).iter("part"):
+            e = next((m.get("value") for m in part.findall("metadata") if m.get("key") == "extruder"), None)
+            if e and e.isdigit():
+                ext[part.get("id")] = int(e) - 1
+    main = parse("3D/3dmodel.model"); objs = meshes_of(main); tris = []; fils = []
     cache = {}
     def resolve(oid, mat, extra=None):
         kind, data = (extra or objs)[oid]
         if kind == "mesh":
-            tris.append(np.einsum("ij,nkj->nki", mat[:3, :3], data) + mat[:3, 3])
+            tris.append(np.einsum("ij,nkj->nki", mat[:3, :3], data) + mat[:3, 3]); fils.append(np.full(len(data), ext.get(oid, 0), dtype=np.uint8))
         else:
             for path, cid, cm in data:
                 if path:
@@ -83,14 +90,19 @@ def mesh_triangles(path, limit=400_000):
             resolve(item.get("objectid"), _tf(item.get("transform")))
     if not tris:
         return None
-    t = np.concatenate(tris)
-    return t[:limit] if len(t) > limit else t
+    t = np.concatenate(tris); f = np.concatenate(fils)
+    t, f = (t[:limit], f[:limit]) if len(t) > limit else (t, f)
+    return (t, f) if with_filament else t
 
 class Plate:
     def __init__(self, path, cfg=None):
         self.path, self.cfg = path, cfg or Settings()
         lines = gcode.read_gcode(path)
         self.layers, _, _ = gcode.parse(lines, self.cfg.filament_area)
+        self.fcolours = gcode.filament_colours(lines)
+        used = {s[9] for segs in self.layers.values() for f, s, _ in segs if f != "Custom" and len(s) > 9}
+        if len(used) < 2:                        # one filament: the usual feature colours; two or more: each filament in its own colour
+            self.fcolours = []
         self.zs = [z for z in sorted(self.layers) if sum(gcode.seg_points(s, 1e9)[1] for f, s, _ in self.layers[z] if f != "Custom") >= 3.0]
         xs, ys = [], []
         for z in self.zs:
@@ -100,25 +112,29 @@ class Plate:
         self.bounds = [min(xs), min(ys), max(xs), max(ys)] if xs else [0, 0, 1, 1]
         self.problems, self.problems_state = {}, "waiting"
         self._lock = threading.Lock()
+        self.tri_fil = None
         try:
-            self.tris = mesh_triangles(path)
+            self.tris, self.tri_fil = mesh_triangles(path, with_filament=True) or (None, None)
+            if not self.fcolours:
+                self.tri_fil = None
         except Exception:
             self.tris = None
     def meta(self):
-        return dict(layers=len(self.zs), zs=[round(z, 2) for z in self.zs], bounds=[round(b, 2) for b in self.bounds], colours=COLOURS, problems=self.problems_state, mesh=0 if self.tris is None else len(self.tris))
+        return dict(layers=len(self.zs), zs=[round(z, 2) for z in self.zs], bounds=[round(b, 2) for b in self.bounds], colours=COLOURS, problems=self.problems_state, mesh=0 if self.tris is None else len(self.tris), filaments=self.fcolours)
     def layer(self, k):
         z = self.zs[k]
-        feats, cur, last = {}, None, None
+        feats, tools, cur, last = {}, {}, None, None
         for f, s, contiguous in self.layers[z]:
             if f == "Custom":
                 continue
             pts = gcode.seg_points(s, 0.6)[0]
-            if cur is None or f != last or not contiguous:
-                cur = []; feats.setdefault(f, []).append(cur)
+            t = s[9] if len(s) > 9 else 0
+            if cur is None or (f, t) != last or not contiguous:
+                cur = []; feats.setdefault(f, []).append(cur); tools.setdefault(f, []).append(t)
             for x, y in pts:
                 cur += [round(float(x), 2), round(float(y), 2)]
-            last = f
-        return dict(z=round(z, 2), features=feats)
+            last = (f, t)
+        return dict(z=round(z, 2), features=feats, tools=tools if self.fcolours else {})
     def compute_problems(self):
         with self._lock:
             if self.problems_state in ("running", "done"):
@@ -133,6 +149,8 @@ class Plate:
             except Exception:
                 self.problems_state = "failed"
         threading.Thread(target=run, daemon=True).start()
+    def filament_bytes(self):
+        return np.ascontiguousarray(self.tri_fil, dtype=np.uint8).tobytes()
     def mesh_bytes(self):
         return np.ascontiguousarray(self.tris, dtype='<f4').tobytes()
     def problems_json(self):
@@ -161,14 +179,16 @@ CARD3 = '''<div class=card id=card3 style='display:none'><div class=row><h3>The 
 const card=document.getElementById('card3'),cv=document.getElementById('c3'),gl=cv.getContext('webgl2');if(!gl){card.style.display='block';card.querySelector('.small').textContent='This browser cannot draw 3D (WebGL2).';return}card.style.display='block';
 function prog(vs,fs){const p=gl.createProgram();for(const [t,src] of [[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);gl.attachShader(p,s)}gl.linkProgram(p);return p}
 const P=prog(`#version 300 es
-in vec3 p;uniform mat4 vp;out vec3 w;void main(){w=p;gl_Position=vp*vec4(p,1.);}`,`#version 300 es
-precision highp float;in vec3 w;uniform float clipz;out vec4 o;void main(){if(w.z>clipz)discard;if(!gl_FrontFacing){o=vec4(.93,.6,.25,1.);return;}
-vec3 n=normalize(cross(dFdx(w),dFdy(w)));float l=.30+.70*abs(dot(n,normalize(vec3(.4,-.5,.8))));vec3 c=mix(vec3(.55,.64,.78),vec3(.75,.82,.92),clamp(w.z/40.,0.,1.));o=vec4(c*l,1.);}`);
+in vec3 p;in vec3 c;uniform mat4 vp;out vec3 w;out vec3 cc;void main(){w=p;cc=c;gl_Position=vp*vec4(p,1.);}`,`#version 300 es
+precision highp float;in vec3 w;in vec3 cc;uniform float clipz;uniform float multi;out vec4 o;void main(){if(w.z>clipz)discard;if(!gl_FrontFacing){o=vec4(.93,.6,.25,1.);return;}
+vec3 n=normalize(cross(dFdx(w),dFdy(w)));float l=.30+.70*abs(dot(n,normalize(vec3(.4,-.5,.8))));vec3 c=multi>.5?cc:mix(vec3(.55,.64,.78),vec3(.75,.82,.92),clamp(w.z/40.,0.,1.));o=vec4(c*l,1.);}`);
 const Q=prog(`#version 300 es
 in vec3 p;uniform mat4 vp;out vec3 w;void main(){w=p;gl_Position=vp*vec4(p,1.);gl_PointSize=6.;}`,`#version 300 es
 precision highp float;in vec3 w;uniform float clipz;uniform vec3 col;out vec4 o;void main(){if(w.z>clipz)discard;o=vec4(col,1.);}`);
 const buf=new Float32Array(await (await fetch(base+'/mesh.bin')).arrayBuffer());const nv=buf.length/3;
 const vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,buf,gl.STATIC_DRAW);
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16)/255),multi=!!(meta.filaments&&meta.filaments.length);const cb=gl.createBuffer();
+if(multi){const fr=await fetch(base+'/fil.bin');if(fr.ok){const fi=new Uint8Array(await fr.arrayBuffer()),cl=new Float32Array(nv*3);for(let t=0;t<fi.length;t++){const c=hex(meta.filaments[fi[t]]||'#808080');for(let k=0;k<3;k++)for(let j=0;j<3;j++)cl[(t*3+k)*3+j]=c[j]}gl.bindBuffer(gl.ARRAY_BUFFER,cb);gl.bufferData(gl.ARRAY_BUFFER,cl,gl.STATIC_DRAW)}}
 let lo=[1e9,1e9,1e9],hi=[-1e9,-1e9,-1e9];for(let i=0;i<buf.length;i+=3)for(let k=0;k<3;k++){lo[k]=Math.min(lo[k],buf[i+k]);hi[k]=Math.max(hi[k],buf[i+k])}
 const ctr=[0,1,2].map(k=>(lo[k]+hi[k])/2),size=Math.max(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2]);
 let th=-.6,ph=.55,dist=size*1.9,clipz=1e9,pts={bridge:null,cant:null};
@@ -180,7 +200,9 @@ function draw(){gl.viewport(0,0,cv.width,cv.height);gl.clearColor(.953,.945,.918
  const e=[ctr[0]+dist*Math.cos(ph)*Math.sin(th),ctr[1]-dist*Math.cos(ph)*Math.cos(th),ctr[2]+dist*Math.sin(ph)];
  const vp=mul(persp(.7,cv.width/cv.height,size*.05,size*20),look(e,ctr,[0,0,1]));const cz=document.getElementById('clip').checked?clipz:1e9;
  gl.useProgram(P);gl.uniformMatrix4fv(gl.getUniformLocation(P,'vp'),false,vp);gl.uniform1f(gl.getUniformLocation(P,'clipz'),cz);
- gl.bindBuffer(gl.ARRAY_BUFFER,vb);let a=gl.getAttribLocation(P,'p');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,3,gl.FLOAT,false,0,0);gl.drawArrays(gl.TRIANGLES,0,nv);
+ gl.uniform1f(gl.getUniformLocation(P,'multi'),multi?1:0);gl.bindBuffer(gl.ARRAY_BUFFER,vb);let a=gl.getAttribLocation(P,'p');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,3,gl.FLOAT,false,0,0);
+ const ac=gl.getAttribLocation(P,'c');if(ac>=0){if(multi){gl.bindBuffer(gl.ARRAY_BUFFER,cb);gl.enableVertexAttribArray(ac);gl.vertexAttribPointer(ac,3,gl.FLOAT,false,0,0)}else gl.disableVertexAttribArray(ac)}
+ gl.drawArrays(gl.TRIANGLES,0,nv);if(ac>=0)gl.disableVertexAttribArray(ac);
  gl.useProgram(Q);gl.uniformMatrix4fv(gl.getUniformLocation(Q,'vp'),false,vp);gl.uniform1f(gl.getUniformLocation(Q,'clipz'),cz);a=gl.getAttribLocation(Q,'p');
  for(const [k,col] of [['bridge',[.91,.64,.1]],['cant',[.84,.16,.16]]])if(pts[k]){gl.uniform3fv(gl.getUniformLocation(Q,'col'),col);gl.bindBuffer(gl.ARRAY_BUFFER,pts[k].b);gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,3,gl.FLOAT,false,0,0);gl.drawArrays(gl.POINTS,0,pts[k].n)}}
 window.f2pSet=z=>{clipz=z+0.05;draw()};
@@ -207,8 +229,9 @@ function tx(x){{const b=meta.bounds,s=Math.min((cv.width-40)/(b[2]-b[0]),(cv.hei
 function draw(poly,col,w,alpha){{cx.strokeStyle=col;cx.lineWidth=w;cx.globalAlpha=alpha;cx.beginPath();for(const p of poly){{for(let i=0;i<p.length;i+=2){{const t=tx([p[i],p[i+1]]);i?cx.lineTo(t[0],t[1]):cx.moveTo(t[0],t[1])}}}}cx.stroke()}}
 async function show(k){{if(busy){{want=k;return}}busy=true;want=-1;cur=k;sl.value=k;
  const d=await (await fetch(base+'/layer/'+k+'.json')).json();cx.globalAlpha=1;cx.clearRect(0,0,cv.width,cv.height);
- if(prev)for(const f in prev.features)draw(prev.features[f],'#c9c9c9',1,.5);
- let counts=[];for(const f in d.features){{draw(d.features[f],meta.colours[f]||(f.startsWith('Support')?meta.colours['Support']:'#888'),1.6,1);counts.push(f)}}
+ const fil=meta.filaments&&meta.filaments.length;if(fil){{cx.fillStyle='#8f9197';cx.fillRect(0,0,cv.width,cv.height)}}
+ if(prev)for(const f in prev.features)draw(prev.features[f],fil?'#74767c':'#c9c9c9',1,.5);
+ let counts=[];for(const f in d.features){{if(fil){{d.features[f].forEach((poly,i)=>draw([poly],meta.filaments[(d.tools[f]||[])[i]]||'#888',2.2,1))}}else draw(d.features[f],meta.colours[f]||(f.startsWith('Support')?meta.colours['Support']:'#888'),1.6,1);counts.push(f)}}
  if(pc.checked&&probs[String(d.z)]){{const pz=probs[String(d.z)],b=meta.bounds,t0=tx([0,0]),s=t0[2];cx.globalAlpha=.55;
   for(const [kind,col] of [['bridge','#e8a21a'],['cant','#d62828']])for(const c of pz[kind]||[]){{const t=tx(c);cx.fillStyle=col;cx.fillRect(t[0]-s*.5,t[1]-s*.5,s*1.1,s*1.1)}}}}
  lz.textContent='Layer '+(k+1)+' of '+meta.layers+'  ·  height '+d.z.toFixed(2)+' mm';
@@ -217,7 +240,7 @@ async function show(k){{if(busy){{want=k;return}}busy=true;want=-1;cur=k;sl.valu
  prev=d;window.__lastZ=d.z;if(window.f2pSet)window.f2pSet(d.z);busy=false;if(want>=0&&want!==k)show(want)}}
 async function loadProblems(){{for(let i=0;i<400;i++){{const r=await (await fetch(base+'/problems.json')).json();probs=r.by_z||{{}};if(r.state==='done'||r.state==='failed'){{if(r.state==='failed')st.textContent='(the hanging-plastic check could not run)';else if(window.f2pProb)window.f2pProb(probs);show(cur);return}}await sleep(2000)}}}}
 (async()=>{{meta=await (await fetch(base+'/meta.json')).json();sl.max=meta.layers-1;
- const lg=document.getElementById('legend');lg.innerHTML=Object.entries(meta.colours).filter(([k])=>k!=='Custom').map(([k,c])=>`<span style="margin-right:12px"><i style="display:inline-block;width:12px;height:3px;background:${{c}};vertical-align:middle"></i> ${{k}}</span>`).join('');
+ const lg=document.getElementById('legend');if(meta.filaments&&meta.filaments.length)lg.innerHTML=meta.filaments.map((c,i)=>`<span style="margin-right:12px"><i style="display:inline-block;width:14px;height:10px;background:${{c}};border:1px solid #555;vertical-align:middle"></i> filament ${{i+1}}</span>`).join('')+'<span class=small>(drawn on grey so white shows)</span>';else lg.innerHTML=Object.entries(meta.colours).filter(([k])=>k!=='Custom').map(([k,c])=>`<span style="margin-right:12px"><i style="display:inline-block;width:12px;height:3px;background:${{c}};vertical-align:middle"></i> ${{k}}</span>`).join('');
  sl.addEventListener('input',()=>show(+sl.value));pc.addEventListener('change',()=>show(cur));
  pl.addEventListener('click',()=>{{if(timer){{clearInterval(timer);timer=null;pl.textContent='Play'}}else{{pl.textContent='Pause';timer=setInterval(()=>{{if(cur>=meta.layers-1){{clearInterval(timer);timer=null;pl.textContent='Play';return}}show(cur+1)}},90)}}}});
  document.addEventListener('keydown',e=>{{if(e.key==='ArrowRight')show(Math.min(cur+1,meta.layers-1));if(e.key==='ArrowLeft')show(Math.max(cur-1,0))}});

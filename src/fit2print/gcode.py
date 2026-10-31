@@ -37,15 +37,19 @@ def seg_points(s, step):
 
 def parse(lines, filament_area=math.pi * 0.875 ** 2):
     """-> (layers, flow_time, max_flow). layers[z] = [(feature, segment, contiguous_with_previous)]; a segment is
-    (cmd, x0, y0, x1, y1, I, J, flow mm3/s, seconds)."""
+    (cmd, x0, y0, x1, y1, I, J, flow mm3/s, seconds, filament): the filament is the slicer's tool number (T0, T1 ...) counted from 0."""
     x = y = z = 0.0
-    feed, feat = 1800.0, None
+    feed, feat, tool = 1800.0, None, 0
     layers = defaultdict(list)
     flow_time, max_flow = defaultdict(float), defaultdict(float)
     last_end = None
     for l in lines:
         if l.startswith("; FEATURE:"):
             feat = l[10:].strip()
+            continue
+        if len(l) > 1 and l[0] == "T" and l[1:].split(None, 1)[0].isdigit():       # a filament change (T255 is the AMS unload at the end, not a filament)
+            if int(l[1:].split(None, 1)[0]) < 32:
+                tool = int(l[1:].split(None, 1)[0])
             continue
         if not l or l[0] not in "GM":
             continue
@@ -67,9 +71,9 @@ def parse(lines, filament_area=math.pi * 0.875 ** 2):
                     q = v["E"] * filament_area / secs
                     flow_time[feat] += secs
                     max_flow[feat] = max(max_flow[feat], q)
-                    seg = seg + (q, secs)
+                    seg = seg + (q, secs, tool)
                 else:
-                    seg = seg + (0.0, 0.0)
+                    seg = seg + (0.0, 0.0, tool)
                 contiguous = last_end is not None and math.hypot(last_end[0] - x, last_end[1] - y) < 0.05
                 layers[round(z, 3)].append((feat, seg, contiguous))
                 last_end = (nx, ny)
@@ -88,3 +92,10 @@ def real_layers(layers, min_segments=20, min_length=30.0):
         if len(part) >= min_segments or sum(seg_points(s, 1e9)[1] for s in part) >= min_length:
             out.append(z)
     return out
+
+def filament_colours(lines):
+    """['#RRGGBB', ...] from the sliced file's own header (one per filament), or []."""
+    for l in lines[:20000]:
+        if l.startswith("; filament_colour ="):
+            return [c.strip() for c in l.split("=", 1)[1].split(";") if c.strip()]
+    return []
