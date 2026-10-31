@@ -57,3 +57,72 @@ unit = "mm"
 basis = "notes"
 source = "Phonosphere notes: not re-checked today"
 critical = true
+
+[dim.frame_thickness]
+value = 3.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere notes (frame 3 mm): not re-checked"
+critical = false
+
+[dim.magnet_height]
+value = 20.0
+unit = "mm"
+basis = "estimate"
+source = "a guess for the magnet's thickness: not in the sources"
+critical = false
+
+[dim.slot_width]
+value = 5.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere notes (slots 5 x 7 mm); drawn here as round holes 5 mm across"
+critical = false
+
+[dim.cone_diameter]
+value = 85.0
+unit = "mm"
+basis = "estimate"
+source = "a guess for the visible cone: not in the sources"
+critical = false
+
+[shape]
+note = "Outline only, in the speaker's own frame: the front of the baffle is z = 0 and the speaker body goes down from it. Every size is unverified until measured."
+
+[[shape.part]]
+name = "frame"
+label = "Frame"
+colour = "#2B2B2B"
+type = "box"
+at = ["-frame_size/2", "-frame_size/2", 0]
+size = ["frame_size", "frame_size", "frame_thickness"]
+holes = [["mount_circle_diameter/2*0.7071", "mount_circle_diameter/2*0.7071", "slot_width"], ["-mount_circle_diameter/2*0.7071", "mount_circle_diameter/2*0.7071", "slot_width"], ["mount_circle_diameter/2*0.7071", "-mount_circle_diameter/2*0.7071", "slot_width"], ["-mount_circle_diameter/2*0.7071", "-mount_circle_diameter/2*0.7071", "slot_width"]]
+
+[[shape.part]]
+name = "cone"
+label = "Cone"
+colour = "#444444"
+type = "cone"
+at = [0, 0, "-depth_behind_baffle+magnet_height+10"]
+d1 = 30
+d2 = "cone_diameter"
+h = "depth_behind_baffle-magnet_height-10"
+
+[[shape.part]]
+name = "basket"
+label = "Basket"
+colour = "#7B7B7B"
+type = "cone"
+at = [0, 0, "-depth_behind_baffle+magnet_height"]
+d1 = "magnet_diameter"
+d2 = "baffle_cutout_diameter-6"
+h = "depth_behind_baffle-magnet_height"
+
+[[shape.part]]
+name = "magnet"
+label = "Magnet"
+colour = "#303030"
+type = "cyl"
+at = [0, 0, "-depth_behind_baffle"]
+d = "magnet_diameter"
+h = "magnet_height"

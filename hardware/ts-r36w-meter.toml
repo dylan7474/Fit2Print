@@ -32,3 +32,59 @@ unit = "mm"
 basis = "notes"
 source = "Phonosphere model parameters (mtr_front_t)"
 critical = true
+
+[dim.block_width]
+value = 17.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere notes (a 17 x 18 mm block on the back): measure"
+critical = false
+
+[dim.block_height]
+value = 18.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere notes (a 17 x 18 mm block on the back): measure"
+critical = false
+
+[dim.block_depth]
+value = 14.5
+unit = "mm"
+basis = "notes"
+source = "Phonosphere notes (the block is 14.5 mm deep): measure"
+critical = false
+
+[dim.block_offset]
+value = -9.0
+unit = "mm"
+basis = "estimate"
+source = "Phonosphere notes say the block is 'in the lower half'; this is a guess at how far below the centre: measure"
+critical = false
+
+[shape]
+note = "Outline only, in the meter's own frame: the front face of the square case is z = 0, the round front stands out in front of it and the block goes behind. Unverified until measured."
+
+[[shape.part]]
+name = "case"
+label = "Case"
+colour = "#9FB3C8"
+type = "box"
+at = ["-case_side/2", "-case_side/2", "-case_depth"]
+size = ["case_side", "case_side", "case_depth"]
+
+[[shape.part]]
+name = "front"
+label = "Round front"
+colour = "#4A4A4A"
+type = "cyl"
+at = [0, 0, 0]
+d = "front_diameter"
+h = "front_proud"
+
+[[shape.part]]
+name = "block"
+label = "Back block"
+colour = "#8A8A8A"
+type = "box"
+at = ["-block_width/2", "block_offset-block_height/2", "-case_depth-block_depth"]
+size = ["block_width", "block_height", "block_depth"]

@@ -98,3 +98,253 @@ value = 2.6
 unit = "mm"
 basis = "estimate"
 source = "no published figure found"
+
+[dim.pcb_thickness]
+value = 1.4
+unit = "mm"
+basis = "estimate"
+source = "typical Raspberry Pi board; not on the drawing: measure"
+critical = false
+
+[dim.hole_d]
+value = 2.75
+unit = "mm"
+basis = "estimate"
+source = "the drawing shows the four holes but not their diameter; 2.75 mm is the usual Pi hole: measure"
+critical = false
+
+[dim.header_width]
+value = 5.08
+unit = "mm"
+basis = "derived"
+source = "two rows at 2.54 mm pitch"
+critical = false
+
+[dim.header_gap]
+value = 0.9
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm: gap from the header block to the far long edge"
+critical = false
+
+[dim.header_height]
+value = 8.5
+unit = "mm"
+basis = "estimate"
+source = "typical fitted 2x20 header, 8.5 mm above the board: not on the drawing"
+critical = false
+
+[dim.hdmi_width]
+value = 11.2
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.hdmi_depth]
+value = 7.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.hdmi_height]
+value = 3.2
+unit = "mm"
+basis = "estimate"
+source = "typical connector height: not on the drawing"
+critical = false
+
+[dim.usb_width]
+value = 7.9
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.usb_depth]
+value = 6.2
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm (the micro USB sockets stand 0.7 mm proud of the board edge)"
+critical = false
+
+[dim.usb_height]
+value = 2.8
+unit = "mm"
+basis = "estimate"
+source = "typical connector height: not on the drawing"
+critical = false
+
+[dim.sd_x]
+value = 1.7
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.sd_width]
+value = 11.6
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.sd_y]
+value = 10.9
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm (from the near long edge)"
+critical = false
+
+[dim.sd_depth]
+value = 12.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.sd_height]
+value = 1.5
+unit = "mm"
+basis = "estimate"
+source = "a flat component about this tall: not on the drawing"
+critical = false
+
+[dim.soc_x]
+value = 19.9
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.soc_width]
+value = 15.3
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.soc_y]
+value = 6.6
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm (from the near long edge)"
+critical = false
+
+[dim.soc_depth]
+value = 15.0
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.soc_height]
+value = 1.2
+unit = "mm"
+basis = "estimate"
+source = "a flat component about this tall: not on the drawing"
+critical = false
+
+[dim.shield_x]
+value = 38.0
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.shield_width]
+value = 11.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.shield_y]
+value = 7.6
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm (from the near long edge)"
+critical = false
+
+[dim.shield_depth]
+value = 12.0
+unit = "mm"
+basis = "derived"
+source = "scaled off the official mechanical drawing's outline (the drawing draws the component but does not dimension it): about +/- 0.3 mm"
+critical = false
+
+[dim.shield_height]
+value = 1.4
+unit = "mm"
+basis = "estimate"
+source = "a flat component about this tall: not on the drawing"
+critical = false
+
+[shape]
+note = "Outline only: the board, holes and connector positions follow the official drawing; the heights are estimates (marked unverified) until measured."
+
+[[shape.part]]
+name = "pcb"
+label = "Board"
+colour = "#2E7D32"
+type = "box"
+at = [0, 0, 0]
+size = ["length", "width", "pcb_thickness"]
+holes = [["hole_inset", "hole_inset", "hole_d"], ["length-hole_inset", "hole_inset", "hole_d"], ["hole_inset", "width-hole_inset", "hole_d"], ["length-hole_inset", "width-hole_inset", "hole_d"]]
+
+[[shape.part]]
+name = "header"
+label = "40-pin header"
+colour = "#222222"
+type = "box"
+at = ["header_centre_x-header_length/2", "width-header_gap-header_width", "pcb_thickness"]
+size = ["header_length", "header_width", "header_height"]
+
+[[shape.part]]
+name = "hdmi"
+label = "Mini HDMI"
+colour = "#B8B8B8"
+type = "box"
+at = ["port_hdmi_x-hdmi_width/2", 0, "pcb_thickness"]
+size = ["hdmi_width", "hdmi_depth", "hdmi_height"]
+
+[[shape.part]]
+name = "usb-data"
+label = "Micro USB (data)"
+colour = "#B8B8B8"
+type = "box"
+at = ["port_usb_data_x-usb_width/2", -0.7, "pcb_thickness"]
+size = ["usb_width", "usb_depth", "usb_height"]
+
+[[shape.part]]
+name = "usb-power"
+label = "Micro USB (power)"
+colour = "#B8B8B8"
+type = "box"
+at = ["port_usb_power_x-usb_width/2", -0.7, "pcb_thickness"]
+size = ["usb_width", "usb_depth", "usb_height"]
+
+[[shape.part]]
+name = "sd"
+label = "SD card socket"
+colour = "#9AA0A6"
+type = "box"
+at = ["sd_x", "sd_y", "pcb_thickness"]
+size = ["sd_width", "sd_depth", "sd_height"]
+
+[[shape.part]]
+name = "soc"
+label = "Processor"
+colour = "#555555"
+type = "box"
+at = ["soc_x", "soc_y", "pcb_thickness"]
+size = ["soc_width", "soc_depth", "soc_height"]
+
+[[shape.part]]
+name = "shield"
+label = "Wi-Fi shield"
+colour = "#C9CED3"
+type = "box"
+at = ["shield_x", "shield_y", "pcb_thickness"]
+size = ["shield_width", "shield_depth", "shield_height"]

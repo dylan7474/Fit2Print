@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, ipaddress, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import archive as archive_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, render as render_mod, printer as printer_mod, project
+from . import archive as archive_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, componentview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -102,6 +102,7 @@ def hardware_detail(hid, flash=""):
     return page(e.get("name", hid), f"""<p><a href='/hardware'>&larr; Components</a></p><h1>{esc(e.get('name', hid))}</h1>
 {('<div class=flash>' + esc(flash) + '</div>') if flash else ''}<p class=sub>{esc(e.get('note', ''))}</p>
 <div class=card><table style='width:100%;border-collapse:collapse;font-size:14px'><tr style='text-align:left;color:var(--mute)'><th>Dimension (bold = the fit depends on it)</th><th>Published</th><th>Status</th><th>Source</th><th>Your measurement</th></tr>{''.join(rows)}</table></div>
+{componentview.card(hid, e)}
 {('<div class=card><b>Sources</b><ul>' + src + '</ul></div>') if src else ''}
 <style>td,th{{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}}</style>""")
 
@@ -575,6 +576,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not os.path.isfile(fp): return self._send(404, "no such picture", "text/plain")
                 ct = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "svg": "image/svg+xml"}[jc.group(2).rsplit(".", 1)[1]]
                 with open(fp, "rb") as fh: return self._send(200, fh.read(), ct, (("Cache-Control", "no-cache"), ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")))
+            jh = re.fullmatch(r"/hardware/([a-z0-9-]+)/3d/(meta\.json|[a-z0-9_-]{1,40}\.bin)", path)
+            if jh:
+                ent = hw_mod.load_all().get(jh.group(1))
+                if not ent or not componentview.has_shape(ent): return self._send(404, "no 3D shape for this component", "text/plain")
+                try:
+                    d3 = componentview.ensure(ent, self.render_command)
+                except (RuntimeError, ValueError, OSError) as ex:
+                    return self._send(500, json.dumps(dict(error=str(ex))), "application/json")
+                fp = os.path.join(d3, jh.group(2))
+                if not os.path.isfile(fp): return self._send(404, "no such piece", "text/plain")
+                with open(fp, "rb") as fh: return self._send(200, fh.read(), "application/json" if fp.endswith(".json") else "application/octet-stream", (("Cache-Control", "no-cache"),))
             jm = re.fullmatch(r"/p/([a-z0-9-]+)/model3d/(meta\.json|[a-z0-9_-]{1,40}\.bin)", path)
             if jm and jm.group(1) in self.app.projects():
                 fp = os.path.join(modelview.dir3d(self.app.projects()[jm.group(1)][0]), jm.group(2))

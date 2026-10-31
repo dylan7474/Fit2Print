@@ -94,7 +94,7 @@ def load_meta(folder):
     except (OSError, ValueError):
         return None
 
-JS = r"""(async function(){const base="/p/%PID%/model3d",stamp=%STAMP%;const card=document.getElementById('m3d'),cv=document.getElementById('m3c'),note=document.getElementById('m3n');
+JS = r"""(async function(){const base="%BASE%",stamp="%STAMP%";const card=document.getElementById('m3d'),cv=document.getElementById('m3c'),note=document.getElementById('m3n');
 const meta=await (await fetch(base+'/meta.json?n='+stamp)).json();const gl=cv.getContext('webgl2');if(!gl){note.textContent='This browser cannot draw 3D (it needs WebGL2).';return}
 function prog(vs,fs){const p=gl.createProgram();for(const [t,src] of [[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]]){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);gl.attachShader(p,s)}gl.linkProgram(p);return p}
 const P=prog(`#version 300 es
@@ -115,18 +115,22 @@ function draw(){gl.viewport(0,0,cv.width,cv.height);gl.clearColor(.953,.945,.918
  draws++;window.__f2pView={th,ph,dist,draws,scene:scene.name,pieces:scene.pieces.length,shown:scene.pieces.filter(q=>items[q.name].on).length,tris:scene.pieces.reduce((s,q)=>s+q.tris,0)}}
 function panel(){const sb=document.getElementById('m3s'),pl=document.getElementById('m3p');sb.innerHTML='';for(const s of meta.scenes){const b=document.createElement('button');b.type='button';b.className='btn'+(s===scene?'':' ghost');b.textContent=s.label;b.onclick=()=>{scene=s;fit();panel();draw()};sb.appendChild(b)}
  pl.innerHTML='';for(const q of scene.pieces){const l=document.createElement('label');l.style.cssText='display:inline-flex;gap:6px;align-items:center;margin:4px 14px 4px 0;font-size:15px';const c=document.createElement('input');c.type='checkbox';c.checked=items[q.name].on;c.style.width='auto';c.onchange=()=>{items[q.name].on=c.checked;draw()};
-  const sw=document.createElement('span');sw.style.cssText='width:14px;height:14px;border-radius:3px;border:1px solid #0003;background:'+q.colour;l.append(c,sw,document.createTextNode(q.label));pl.appendChild(l)}}
+  const sw=document.createElement('span');sw.style.cssText='width:14px;height:14px;border-radius:3px;border:1px solid #0003;background:'+q.colour;l.append(c,sw,document.createTextNode(q.label));if(q.status==='unverified'){const w=document.createElement('span');w.textContent=' \u26a0 unverified';w.title='a size this part rests on has not been measured';w.style.cssText='color:#b7791f;font-size:13px;font-weight:600';l.appendChild(w)}else if(q.status==='measured'){const w=document.createElement('span');w.textContent=' \u2713 measured';w.style.cssText='color:#2f855a;font-size:13px';l.appendChild(w)}pl.appendChild(l)}}
 let drag=null;cv.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing'});cv.addEventListener('pointerup',()=>{drag=null;cv.style.cursor='grab'});
 cv.addEventListener('pointermove',e=>{if(!drag)return;th-=(e.clientX-drag[0])*.008;ph=Math.max(-1.45,Math.min(1.5,ph+(e.clientY-drag[1])*.008));drag=[e.clientX,e.clientY];draw()});
 cv.addEventListener('wheel',e=>{e.preventDefault();dist=Math.max(size*.4,Math.min(size*8,dist*(1+Math.sign(e.deltaY)*.1)));draw()},{passive:false});
-document.getElementById('m3r').addEventListener('click',()=>{fit();draw()});note.textContent='Drag to turn it, scroll or pinch to zoom. Untick a part to hide it.';fit();panel();draw();})();"""
+document.getElementById('m3r').addEventListener('click',()=>{fit();draw()});note.textContent=(meta.note?meta.note+' ':'')+'Drag to turn it, scroll or pinch to zoom. Untick a part to hide it.';fit();panel();draw();})();"""
 
 def card(pid, folder, esc=lambda s: s):
     """The card for the project page: '' until the 3D view has been built."""
     meta = load_meta(folder)
     if not meta or not meta.get("scenes"):
         return ""
-    return (f"<div class=card id=m3d><div class=row><h3>The model in 3D</h3><span><span id=m3s></span> <button class='btn ghost' id=m3r type=button>Reset view</button></span></div>"
+    return viewer_card(f"/p/{pid}/model3d", int(meta.get("stamp", 0)), "The model in 3D")
+
+def viewer_card(base, stamp, title):
+    """The viewer: a card with a canvas and a script that loads BASE/meta.json and BASE/<piece>.bin. Used for a project's model and for a component."""
+    return (f"<div class=card id=m3d><div class=row><h3>{title}</h3><span><span id=m3s></span> <button class='btn ghost' id=m3r type=button>Reset view</button></span></div>"
             "<canvas id=m3c width=1000 height=560 style='width:100%;background:#f3f1ea;border:1px solid var(--line);border-radius:10px;touch-action:none;cursor:grab;margin-top:8px'></canvas>"
             "<div id=m3p style='margin-top:6px'></div><div class=small id=m3n></div></div>"
-            "<script>" + JS.replace("%PID%", pid).replace("%STAMP%", str(int(meta.get("stamp", 0)))) + "</script>")
+            "<script>" + JS.replace("%BASE%", base).replace("%STAMP%", str(stamp)) + "</script>")
