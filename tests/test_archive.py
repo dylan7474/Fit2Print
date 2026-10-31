@@ -16,6 +16,9 @@ class Archive(unittest.TestCase):
         t = self.call("GET", "/")[1]; self.assertIn("Archived projects (1)", t); self.assertIn("Restore", t)
         self.assertIn("href='#archived'", t); self.assertIn("id=archived", t)      # a visible link at the top that opens the list
         self.assertEqual(self.act("restore"), 303); self.assertNotIn("Archived projects", self.call("GET", "/")[1]); self.assertNotIn("#archived", self.call("GET", "/")[1])
+    def test_the_project_page_has_an_archive_button_until_it_is_archived(self):
+        self.assertIn("value=archive", self.call("GET", "/p/arch-test")[1])                  # the button on an active project
+        self.act("archive"); t = self.call("GET", "/p/arch-test")[1]; self.assertNotIn("value=archive>", t); self.assertIn("value=restore", t)
     def test_nothing_is_deleted(self):
         self.act("archive"); self.assertTrue(os.path.exists(os.path.join(self.f, "brief.md"))); self.assertEqual(self.call("GET", "/p/arch-test")[0], 200)
         self.assertIn("This project is archived", self.call("GET", "/p/arch-test")[1])

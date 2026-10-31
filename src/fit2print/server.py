@@ -141,6 +141,13 @@ def housekeeping_card(pid, folder, marker):
     return (f"<details class=card><summary class=small>Housekeeping</summary><div class=meta style='margin:8px 0'>Archiving hides the project from Home. Nothing is deleted and it can be restored.</div>"
             f"<form method=post action='/p/{esc(pid)}/archive'><input type=hidden name=action value=archive><button class='btn ghost' type=submit>Archive this project</button></form></details>")
 
+def archive_button(pid, folder, marker):
+    """The Archive button in the top bar of an active project (the radio is not archived from here; an archived project shows its banner instead)."""
+    if marker.get("adapter") == "phonosphere" or archive_mod.is_archived(folder):
+        return ""
+    return (f"<form method=post action='/p/{esc(pid)}/archive' style='display:inline;margin:0'><input type=hidden name=action value=archive>"
+            "<button class='btn ghost' type=submit title='Hide this project from Home. Nothing is deleted; you can restore it.'>Archive</button></form>")
+
 def housekeeping_banner(pid, folder, marker):
     return housekeeping_card(pid, folder, marker) if archive_mod.is_archived(folder) else ""
 
@@ -579,7 +586,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if m.group(2): return self._send(200, log_form(self.app, pid, qs.get("msg", [""])[0]), headers=hdr)
                 folder, mk, data = self.app.load(pid)
                 doc = dashboard.render(data)
-                bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><a class=btn href='/p/{pid}/log'>Log a print</a></div>"
+                bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><span><a class=btn href='/p/{pid}/log'>Log a print</a> {archive_button(pid, folder, mk)}</span></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
                 return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
