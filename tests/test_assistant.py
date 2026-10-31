@@ -31,7 +31,9 @@ class Assist(unittest.TestCase):
         c = self.args()[0]
         self.assertEqual(c[c.index("--permission-mode") + 1], "dontAsk")                     # anything not allowed is denied, never asked
         allowed = c[c.index("--allowedTools") + 1:c.index("--max-budget-usd")]
-        self.assertEqual(allowed, ["Read", "Glob", "Grep", "Write", "Edit", "Bash(fit2print:*)"])     # no free Bash, no web
+        self.assertEqual(allowed, ["Read", "Glob", "Grep", "Write", "Edit", "WebFetch", "WebSearch", "Bash(fit2print:*)"])     # the web to read, but no free Bash
+        self.assertNotIn("Bash", allowed)                                                    # NEGATIVE CONTROL: a bare Bash would let it run anything
+        self.assertFalse([x for x in allowed if x in ("Task", "Agent", "NotebookEdit", "mcp__")])
         self.assertIn("--max-budget-usd", c); self.assertIn("--max-turns", c)
     def test_it_runs_in_the_project_folder_and_can_write_there(self):
         wait(self.a, self.a.start("p", self.f, "Assist Test", "WRITE please"))
