@@ -1,0 +1,30 @@
+title = "Assembly guide: Pi Zero 2 W wall case"
+convention = "Left and right are as you look at the case with the ports facing you."
+note = "A sample guide, written to test Fit2Print. Measure your real board before you print (see the component page)."
+
+[[step]]
+title = "Check the board and the case before closing it"
+text = "Hold the Pi Zero 2 W over the base without screwing anything: its four holes should sit over the four posts, and the three ports (mini HDMI, micro USB, micro USB) and the SD slot should line up with their openings in the walls."
+bought = ["Raspberry Pi Zero 2 W (header fitted)"]
+parts = ["base"]
+picture = "pulled-apart"
+tip = "If a port does not line up, stop: measure the board and tell the assistant, do not file the case."
+
+[[step]]
+title = "Seat the board on its four posts"
+text = "Lower the board straight down so the posts pass through its holes. It sits on the shoulders of the posts with the header pins pointing up. The SD card goes in from the end before the lid goes on."
+parts = ["base"]
+picture = "assembled-front"
+
+[[step]]
+title = "Snap the lid on"
+text = "Put the lid's four hooks into the two short ends and press down at the corners until it clicks. To open it, press a fingernail or a coin into the gap at an end and lift."
+parts = ["lid_print"]
+picture = "pulled-apart"
+tip = "The hooks are flexed about 0.8 mm. Do not open and close it more than you need until we have printed the test hook."
+
+[[step]]
+title = "Hang it on the wall"
+text = "Put two screws in the wall 40 mm apart, heads proud by about 3 mm. Push the case on with the big round ends of the keyhole slots over the screw heads, then slide it along the slots."
+bought = ["2 wall screws, head about 7 mm"]
+picture = "assembled-back"

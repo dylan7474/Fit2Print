@@ -171,5 +171,41 @@ class TrustLan(unittest.TestCase):
         p = self.serve(True)
         c = http.client.HTTPConnection("127.0.0.1", p, timeout=10); c.request("GET", "/?t=s3cret", headers={"Cf-Ray": "x"}); r = c.getresponse(); r.read(); self.assertEqual(r.status, 200)
 
+class GuidePage(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory(); self.f = os.path.join(self.d.name, "p"); project.init(self.f, "Guide Test")
+        with open(os.path.join(self.f, "assembly.toml"), "w") as fh:
+            fh.write('title = "Guide"\n[[step]]\ntitle = "Join the halves"\ntext = "bolt them"\nparts = ["pod_L", "pod_R", "missing_part"]\nfixings = [{what = "M3 x 16 bolt", qty = 4}]\npicture = "pic.png"\n'
+                     '[[step]]\ntitle = "Close"\nparts = ["pod_L"]\nfixings = [{what = "M3 x 16 bolt", qty = 2}]\n')
+        with open(os.path.join(self.f, "pic.png"), "wb") as fh: fh.write(b"\x89PNG\r\n\x1a\n" + b"0" * 50)
+        with open(os.path.join(self.f, "secret.png"), "wb") as fh: fh.write(b"\x89PNG\r\n\x1a\n" + b"1" * 50)
+        os.makedirs(os.path.join(self.f, "records"), exist_ok=True)
+        with open(os.path.join(self.f, "records", "plates.jsonl"), "w") as fh:
+            fh.write(json.dumps(dict(part="pod_L", verdict="PASS", minutes=1, grams=1, notes=[], stl_sha="NEW")) + "\n" + json.dumps(dict(part="pod_R", verdict="PASS", minutes=1, grams=1, notes=[], stl_sha="NEW")) + "\n")
+        with open(os.path.join(self.f, "records", "prints.jsonl"), "w") as fh:
+            fh.write(json.dumps(dict(date="2026-10-25", plate="pod_R", result="ok", what="x", design="OLD")) + "\n" + json.dumps(dict(date="2026-10-30", plate="pod_L", result="ok", what="x", design="NEW")) + "\n")
+        self.srv = server.make_server(dict(projects=[self.f], new_projects_dir=os.path.join(self.d.name, "n")), "127.0.0.1", 0)
+        self.port = self.srv.server_address[1]; threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+    def tearDown(self): self.srv.shutdown(); self.srv.server_close(); self.d.cleanup()
+    def get(self, p):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10); c.request("GET", p); r = c.getresponse(); return r.status, r.read().decode("utf-8", "replace")
+    def test_the_guide_shows_steps_hands_status_and_the_other_half(self):
+        s, t = self.get("/p/guide-test/guide"); self.assertEqual(s, 200)
+        self.assertIn("Step 1: Join the halves", t); self.assertIn("LEFT", t); self.assertIn("RIGHT", t); self.assertIn("its other half: pod_R", t)
+    def test_a_part_printed_from_an_older_design_is_flagged(self):      # the 25 Oct pod_R problem
+        s, t = self.get("/p/guide-test/guide"); self.assertIn("printed from an older design", t)
+    def test_fixings_are_added_up_across_steps(self):
+        s, t = self.get("/p/guide-test/guide"); self.assertIn("6 &times;", t)                                  # 4 + 2 M3 x 16 bolts
+    def test_a_part_that_is_not_in_the_project_is_said_so(self):
+        self.assertIn("not in this project", self.get("/p/guide-test/guide")[1])
+    def test_a_step_picture_in_the_guide_is_served_but_other_files_are_not(self):     # NEGATIVE CONTROL
+        self.assertEqual(self.get("/p/guide-test/guide/img/pic.png")[0], 200)
+        self.assertEqual(self.get("/p/guide-test/guide/img/secret.png")[0], 404)                              # exists, but no step names it
+        self.assertEqual(self.get("/p/guide-test/guide/img/..%2Ffit2print.toml")[0], 404)
+    def test_the_project_page_links_the_guide(self):
+        self.assertIn("Open the guide", self.get("/p/guide-test")[1])
+    def test_no_guide_is_a_polite_404(self):
+        os.remove(os.path.join(self.f, "assembly.toml")); self.assertEqual(self.get("/p/guide-test/guide")[0], 404)
+
 if __name__ == "__main__":
     unittest.main()

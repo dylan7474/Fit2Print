@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, ipaddress, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import assistant as assistant_mod, dashboard, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
+from . import assistant as assistant_mod, dashboard, guide as guide_mod, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -155,6 +155,53 @@ EMBED_CSS = """.f2p{margin-bottom:6px}.f2p .row{display:flex;gap:10px;align-item
 .f2p .ghost{background:transparent!important;color:var(--blue)!important;border:1px solid var(--blue)!important}.f2p a{color:var(--blue)}
 .f2p textarea,.f2p input{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;background:var(--card);color:var(--ink)}.f2p .note{background:var(--bg);border-radius:10px;padding:10px 12px;font-size:15px}
 .f2p button:disabled{opacity:.5}"""
+
+def guide_card(pid, folder):
+    g = guide_mod.load(folder)
+    if not g:
+        return ""
+    n = len(g["steps"])
+    return (f"<div class=card><div class=row><div><h3>Assembly guide</h3><div class=meta>{n} steps, with the parts, the fixings and which hand each part is.</div></div>"
+            f"<a class=btn href='/p/{esc(pid)}/guide'>Open the guide</a></div></div>")
+
+def guide_page(app, pid):
+    folder, mk, data = app.load(pid)
+    g = guide_mod.load(folder)
+    if not g:
+        return None
+    steps, totals, need = [], {}, {}
+    for i, s in enumerate(g["steps"], 1):
+        chips = []
+        for name in s.get("parts", []):
+            st, note = guide_mod.part_status(name, data)
+            h, pt = guide_mod.hand(name), guide_mod.partner(name)
+            hc = f"<span class='chip {'blue' if h == 'LEFT' else 'violet'}' title='left/right as in the note above'>{h}</span> " if h else ""
+            extra = (f" <span class=small>(its other half: {esc(pt)})</span>" if pt else "") + (f" <b style='color:var(--red)'>{esc(note)}</b>" if note else "")
+            chips.append(f"<li>{hc}<code>{esc(name)}</code> <span class='chip {guide_mod.COLOUR[st]}'>{guide_mod.LABEL[st]}</span>{extra}</li>")
+            if st != "printed": need[name] = guide_mod.LABEL[st]
+        for b in s.get("bought", []):
+            chips.append(f"<li><span class='chip grey'>buy / have</span> {esc(b)}</li>")
+        fx = ""
+        if s.get("fixings"):
+            rows = ""
+            for f in s["fixings"]:
+                q = int(f.get("qty", 0)); key = f.get("what", "")
+                totals[key] = totals.get(key, 0) + q
+                rows += f"<tr><td>{q} &times;</td><td>{esc(key)}</td><td class=small>{esc(f.get('note', ''))}</td></tr>"
+            fx = f"<table style='border-collapse:collapse;font-size:14px;margin-top:6px'>{rows}</table>"
+        url = guide_mod.picture_url(pid, folder, s.get("picture"))
+        img = f"<a href='{url}'><img alt='step {i}' src='{url}' style='width:100%;border-radius:10px;border:1px solid var(--line)'></a>" if url else ""
+        tip = f"<div class=note style='margin-top:8px'><b>Tip:</b> {esc(s['tip'])}</div>" if s.get("tip") else ""
+        steps.append(f"<div class=card><div class=row><h3>Step {i}: {esc(s['title'])}</h3></div>"
+                     f"<div style='display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px' class=gstep><div>{img}</div><div><p>{esc(s.get('text', ''))}</p>"
+                     f"<ul style='padding-left:18px;margin:6px 0'>{''.join(chips)}</ul>{fx}{tip}</div></div></div>")
+    bom = "".join(f"<tr><td style='padding:3px 10px 3px 0'><b>{q} &times;</b></td><td>{esc(k)}</td></tr>" for k, q in sorted(totals.items()))
+    needs = (f"<div class=needs><b>Not printed yet:</b> {esc(', '.join(sorted(need)))}</div>" if need else "<div class=flash>Every printed part in this guide is printed.</div>")
+    return page(g["title"], f"""<p><a href='/p/{esc(pid)}'>&larr; Back to the project</a></p><h1>{esc(g['title'])}</h1>
+<div class=card style='border-left:5px solid var(--brand)'><b>Left and right.</b> {esc(g['convention'])} A part ending <code>_L</code> is the LEFT one, <code>_R</code> the RIGHT one: they are mirror images and are NOT interchangeable.</div>
+{('<p class=sub>' + esc(g['note']) + '</p>') if g['note'] else ''}{needs}{''.join(steps)}
+<div class=card><h3>Everything the steps use</h3><table style='font-size:14px'>{bom}</table><div class=small style='margin-top:6px'>Counts are added up from the steps above; buy about 10 % spare.</div></div>
+<style>@media(max-width:850px){{.gstep{{grid-template-columns:1fr!important}}}}</style>""")
 
 def load_config(path=None):
     path = path or os.path.expanduser("~/.config/fit2print/config.toml")
@@ -308,6 +355,22 @@ def parse_multipart(headers, body):
             fields[name] = data.decode("utf-8", "replace")
     return fields, files
 
+def _latest_design(folder, marker, part):
+    """The stl_sha of the newest check record for this part, or ''."""
+    p = os.path.join(folder, "PLATE_RESULTS.jsonl" if marker.get("adapter") == "phonosphere" else os.path.join("records", "plates.jsonl"))
+    if not os.path.exists(p):
+        return ""
+    sha = ""
+    with open(p) as f:
+        for l in f:
+            try:
+                r = json.loads(l)
+            except ValueError:
+                continue
+            if r.get("part") == part and r.get("stl_sha"):
+                sha = r["stl_sha"]
+    return sha
+
 def save_print(folder, marker, fields, files):
     part = fields.get("part", "").strip()
     what = fields.get("what", "").strip()
@@ -315,6 +378,9 @@ def save_print(folder, marker, fields, files):
     if not part or not what or result not in ("ok", "partial", "failed", "printing"):
         raise ValueError("a part, a result and a few words about what happened are needed")
     entry = dict(date=datetime.date.today().isoformat(), plate=part[:120], result=result, what=what[:3000], checks="")
+    sha = _latest_design(folder, marker, part)
+    if sha:
+        entry["design"] = sha                                   # which version of the part this print came from, so the guide can say if it has changed since
     if "photo" in files:
         fn, data = files["photo"]
         if len(data) > MAX_UPLOAD:
@@ -409,6 +475,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if mh.group(1) not in hw_mod.load_all(): return self._send(404, page("Not found", "<div class=card>No such component.</div>"))
                 return self._send(200, hardware_detail(mh.group(1), qs.get("msg", [""])[0]), headers=hdr)
             m = re.fullmatch(r"/p/([a-z0-9-]+)(/log)?", path)
+            jg = re.fullmatch(r"/p/([a-z0-9-]+)/guide(?:/img/([A-Za-z0-9_.-]{1,80}))?", path)
+            if jg and jg.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[jg.group(1)]
+                if jg.group(2):
+                    g = guide_mod.load(folder)
+                    allowed = {s.get("picture") for s in (g or {}).get("steps", [])}
+                    fp = os.path.join(folder, jg.group(2))
+                    if jg.group(2) not in allowed or not guide_mod.IMG.fullmatch(jg.group(2)) or not os.path.isfile(fp): return self._send(404, "no such picture", "text/plain")
+                    with open(fp, "rb") as fh: return self._send(200, fh.read(), "image/png" if fp.endswith(".png") else "image/jpeg", (("Cache-Control", "no-cache"),))
+                body = guide_page(self.app, jg.group(1))
+                if body is None: return self._send(404, page("No guide", "<div class=card>This project has no assembly guide yet (assembly.toml).</div>"))
+                return self._send(200, body, headers=hdr)
             jp = re.fullmatch(r"/p/([a-z0-9-]+)/plate/([a-z0-9_-]{1,60})(?:/(meta\.json|problems\.json|mesh\.bin|layer/(\d{1,5})\.json))?", path)
             if jp and jp.group(1) in self.app.projects():
                 folder, mk = self.app.projects()[jp.group(1)]
@@ -453,7 +531,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><a class=btn href='/p/{pid}/log'>Log a print</a></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + guide_card(pid, folder) + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))
