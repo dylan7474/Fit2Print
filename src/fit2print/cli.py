@@ -1,6 +1,6 @@
 """fit2print command line."""
 import argparse, sys
-from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync, hardware, render as render_mod
+from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync, hardware, render as render_mod, export as export_mod
 from .settings import Settings
 
 def cmd_doctor(args):
@@ -207,6 +207,20 @@ def cmd_stage(args):
         print(f"  {e['at']}  {e['from']} -> {e['to']}  ({e['by']})")
     return 0
 
+def cmd_export(args):
+    marker = read_marker(args.project)
+    bad = 0
+    try:
+        res = export_mod.export(args.project, marker)
+    except ValueError as e:
+        print(f"cannot export: {e}"); return 1
+    for r in res:
+        if r["ok"]:
+            print(f"ok    {r['name']}: stl/{r['name']}.stl  {r['size'][0]} x {r['size'][1]} x {r['size'][2]} mm, {r['volume']} cm3" + ("" if r["watertight"] else "  WARNING: not watertight"))
+        else:
+            print(f"FAIL  {r['name']}: {r['error']}"); bad = 1
+    return bad
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -245,6 +259,8 @@ def main(argv=None):
     rn.add_argument("project"); rn.set_defaults(fn=cmd_render)
     st = s.add_parser("stage", help="show a project's stage (--set STAGE to set it directly, e.g. for an established project)")
     st.add_argument("project"); st.add_argument("--set", choices=[k for k, _ in __import__("fit2print.stage", fromlist=["STAGES"]).STAGES]); st.set_defaults(fn=cmd_stage)
+    ex = s.add_parser("export", help="write each [[export]] piece of the model as stl/NAME.stl, flat on the bed, ready for the checks and the slicer")
+    ex.add_argument("project"); ex.set_defaults(fn=cmd_export)
     a = p.parse_args(argv)
     return a.fn(a)
 

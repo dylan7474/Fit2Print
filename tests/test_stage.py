@@ -39,6 +39,12 @@ class AssistantKnowsTheStage(unittest.TestCase):
     def test_in_scope_it_is_told_not_to_design(self):
         wait(self.a, self.a.start("p", self.f, "Assist Test", "hello", "scope"))
         p = self.prompt(); self.assertIn("SCOPE STAGE", p); self.assertIn("Do NOT design", p); self.assertIn("press the button", p)
+    def test_the_stage_is_also_in_the_message_so_a_resumed_conversation_cannot_miss_it(self):   # the dice-test-2 bug
+        wait(self.a, self.a.start("p", self.f, "Assist Test", "go", "concept"))
+        with open(self.log) as fh: c = json.loads(fh.readline())
+        sent = c[c.index("-p") + 1]
+        self.assertIn("CONCEPT stage RIGHT NOW", sent); self.assertIn("go", sent)
+        self.assertEqual([h["text"] for h in self.a.history(self.f) if h["role"] == "you"], ["go"])       # the person's own words are what is remembered and shown
     def test_in_concept_it_is_told_to_draw(self):
         wait(self.a, self.a.start("p", self.f, "Assist Test", "hello", "concept"))
         p = self.prompt(); self.assertIn("CONCEPT STAGE", p); self.assertIn("model.scad", p)

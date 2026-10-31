@@ -49,7 +49,9 @@ class Assistant:
             f.write(json.dumps(dict(at=time.strftime("%Y-%m-%d %H:%M"), role=role, text=text, cost=cost)) + "\n")
     def command_for(self, folder, name, message, session, stage="scope"):
         sp = self._paths(folder)[1]
-        cmd = list(self.command) + ["-p", message, "--output-format", "stream-json", "--verbose", "--model", self.model, "--permission-mode", "dontAsk",
+        note = (f"[Fit2Print: this project is in the {stage_mod.LABEL.get(stage, stage).upper()} stage RIGHT NOW. The person moves the stage with a button; the page has recorded it in records/stages.jsonl, "
+                f"which is the truth even if earlier messages or NEXT.md say otherwise. {stage_mod.WORK.get(stage, '').replace('{f2p}', self.f2p)}]\n\n")
+        cmd = list(self.command) + ["-p", note + message, "--output-format", "stream-json", "--verbose", "--model", self.model, "--permission-mode", "dontAsk",
                "--allowedTools", *ALLOWED, f"Bash({self.f2p}:*)", "--max-budget-usd", str(self.budget), "--max-turns", str(self.max_turns),
                "--append-system-prompt", SYSTEM.format(name=name, f2p=self.f2p, stage_label=stage_mod.LABEL.get(stage, stage).upper(), stage_work=stage_mod.WORK.get(stage, "").replace("{f2p}", self.f2p))]
         cmd += ["--resume", session] if session else ["--session-id", str(uuid.uuid4())]
