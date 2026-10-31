@@ -116,7 +116,7 @@ type = "cone"
 at = [0, 0, "-depth_behind_baffle+magnet_height"]
 d1 = "magnet_diameter"
 d2 = "baffle_cutout_diameter-6"
-h = "depth_behind_baffle-magnet_height"
+h = "depth_behind_baffle-magnet_height-2"
 
 [[shape.part]]
 name = "magnet"
