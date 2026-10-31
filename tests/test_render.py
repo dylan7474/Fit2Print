@@ -21,6 +21,18 @@ class Render(unittest.TestCase):
         self.assertEqual(render.views({})[0]["part"], "assembly")
         with self.assertRaises(ValueError): render.views({"render": [{"name": "../x"}]})            # NEGATIVE CONTROL: no path tricks in a name
         with self.assertRaises(ValueError): render.views({"render": [{"name": "ok", "angle": [1, 2]}]})
+    def test_named_views_look_from_different_places(self):
+        v = {x["name"]: x["angle"] for x in render.views({"render": [dict(name="f", view="front"), dict(name="s", view="right"), dict(name="i", view="iso"), dict(name="t", view="top")]})}
+        self.assertEqual(v["f"], [90.0, 0.0, 0.0]); self.assertEqual(len({tuple(a) for a in v.values()}), 4)          # all four differ
+    def test_the_bug_of_2026_10_31_unknown_fields_are_refused(self):        # NEGATIVE CONTROL: `view = "front"` used to be ignored, so two pictures came out identical
+        with self.assertRaises(ValueError) as c: render.views({"render": [dict(name="a", vue="front")]})
+        self.assertIn("unknown field", str(c.exception))
+        with self.assertRaises(ValueError): render.views({"render": [dict(name="a", view="sideways")]})
+        with self.assertRaises(ValueError): render.views({"render": [dict(name="a", view="front", angle=[1, 2, 3])]})
+    def test_two_views_of_the_same_thing_are_reported(self):
+        m = dict(model="model.scad", render=[dict(name="a", part="assembly"), dict(name="b", part="assembly"), dict(name="c", part="assembly", view="front")])
+        r = {x["name"]: x for x in render.render(self.f, m, [self.fake])}
+        self.assertEqual((r["a"]["same_as"], r["b"]["same_as"], r["c"]["same_as"]), ("", "a", ""))
     def test_it_draws_every_view_into_renders(self):
         m = dict(model="model.scad", render=[dict(name="a", part="assembly"), dict(name="b", part="exploded", angle=[1, 2, 3])])
         r = render.render(self.f, m, [self.fake])

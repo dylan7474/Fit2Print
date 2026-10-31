@@ -177,6 +177,10 @@ RENDER_JOBS = {}
 def render_card(pid, folder, marker):
     """'What it should look like': the project's rendered views, and a button to draw them again. Shown for a project that has a model or pictures."""
     pics = render_mod.list_renders(folder, marker)
+    try:
+        render_mod.views(marker); problem = ""
+    except ValueError as e:
+        problem = f"<div class=note style='background:#fde8e8;color:#8a1c1c;margin-top:8px'>The picture views in fit2print.toml need fixing: {esc(str(e))}</div>"
     sketches = sorted(f for f in (os.listdir(os.path.join(folder, "concept")) if os.path.isdir(os.path.join(folder, "concept")) else []) if re.fullmatch(r"[A-Za-z0-9_.-]{1,80}\.(png|jpg|jpeg|svg)", f))
     if not pics and not sketches and not marker.get("model"):
         return ""
@@ -185,7 +189,7 @@ def render_card(pid, folder, marker):
                     f"<figcaption class=small>{esc(t)}</figcaption></figure>" for t, f in pics)
     cells += "".join(f"<figure style='margin:0'><a href='/p/{esc(pid)}/concept/{esc(f)}'><img alt='{esc(f)}' src='/p/{esc(pid)}/concept/{esc(f)}' style='width:100%;border-radius:10px;border:1px solid var(--line);background:#fff'></a>"
                      f"<figcaption class=small>sketch: {esc(f)}</figcaption></figure>" for f in sketches)
-    empty = "" if (pics or sketches) else "<div class=small>No pictures drawn yet.</div>"
+    empty = problem or ("" if (pics or sketches) else "<div class=small>No pictures drawn yet.</div>")
     btn = (f"<button class='btn ghost' id=rbtn type=button>Draw again</button><span id=rstat class=small style='margin-left:10px'></span>" if marker.get("model") else "")
     return f"""<div class=card><div class=row><h3>What it should look like</h3><div>{btn}</div></div>{empty}
 <div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:10px'>{cells}</div></div>

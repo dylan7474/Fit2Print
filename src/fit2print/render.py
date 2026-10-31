@@ -6,10 +6,14 @@ and saved in the project's renders/ folder. A view names the model's `part`, a c
     title = "Pulled apart"
     part = "exploded"          # the model's `part` variable
     angle = [64, 0, 32]
+Instead of an angle a view may name where we look from:  view = "front" | "back" | "left" | "right" | "top" | "bottom" | "iso"  (an angle and a view together are refused).
+Only name, title, part, view and angle are known: any other field is refused with a message, because a misspelt field used to be ignored and gave two identical pictures.
 Without any [[render]] tables the project gets one view: part = "assembly"."""
 import os, re, shutil, subprocess
 
 DEFAULT = [dict(name="assembled", title="Assembled", part="assembly", angle=[64, 0, 32])]
+VIEWS = {"front": [90, 0, 0], "back": [90, 0, 180], "left": [90, 0, -90], "right": [90, 0, 90], "top": [0, 0, 0], "bottom": [180, 0, 0], "iso": [60, 0, 30]}
+KNOWN = ("name", "title", "part", "view", "angle")
 NAME = re.compile(r"[a-z0-9_-]{1,40}")
 
 def views(marker):
@@ -17,7 +21,17 @@ def views(marker):
     for v in marker.get("render") or DEFAULT:
         if not NAME.fullmatch(str(v.get("name", ""))):
             raise ValueError(f"a render view needs a name of lower-case letters, digits, - or _ (got {v.get('name')!r})")
-        a = v.get("angle", [64, 0, 32])
+        extra = [k for k in v if k not in KNOWN]
+        if extra:
+            raise ValueError(f"view '{v['name']}': unknown field {extra[0]!r} (known: {', '.join(KNOWN)}). To choose where to look from use view = \"front\", \"back\", \"left\", \"right\", \"top\", \"bottom\" or \"iso\", or angle = [x, y, z]")
+        if "view" in v and "angle" in v:
+            raise ValueError(f"view '{v['name']}': give either view or angle, not both")
+        if "view" in v:
+            if v["view"] not in VIEWS:
+                raise ValueError(f"view '{v['name']}': view must be one of {', '.join(VIEWS)} (got {v['view']!r})")
+            a = VIEWS[v["view"]]
+        else:
+            a = v.get("angle", [64, 0, 32])
         if len(a) != 3 or not all(isinstance(x, (int, float)) for x in a):
             raise ValueError(f"view '{v['name']}': angle must be three numbers")
         out.append(dict(name=v["name"], title=v.get("title", v["name"]), part=str(v.get("part", "assembly")), angle=[float(x) for x in a]))
@@ -59,7 +73,8 @@ def render(folder, marker, command=None, size=(1100, 720), timeout=300):
     os.makedirs(renders_dir(folder), exist_ok=True)
     _hardware_scad(folder, marker)
     res = []
-    for v in views(marker):
+    vs = views(marker); seen = {}
+    for v in vs:
         out = os.path.join(renders_dir(folder), v["name"] + ".png")
         c = cmd + ["-q", "--backend=manifold", "-D", f'part="{v["part"]}"', "--autocenter", "--viewall", "--projection", "p",
                    "--camera=0,0,0," + ",".join(str(x) for x in v["angle"]) + ",100", f"--imgsize={size[0]},{size[1]}", "-o", out + ".part.png", mp]
@@ -68,7 +83,9 @@ def render(folder, marker, command=None, size=(1100, 720), timeout=300):
             ok = r.returncode == 0 and os.path.exists(out + ".part.png") and os.path.getsize(out + ".part.png") > 500
             if ok:
                 os.replace(out + ".part.png", out)                       # only a finished picture replaces the old one
-            res.append(dict(name=v["name"], title=v["title"], ok=ok, error="" if ok else (r.stderr.strip().splitlines() or ["OpenSCAD drew nothing"])[-1][:200]))
+            key = (v["part"], tuple(v["angle"])); same = seen.get(key); seen.setdefault(key, v["name"])
+            res.append(dict(name=v["name"], title=v["title"], ok=ok, error="" if ok else (r.stderr.strip().splitlines() or ["OpenSCAD drew nothing"])[-1][:200],
+                            same_as=same or ""))                       # the same part from the same angle as an earlier view: the picture would be identical
         except FileNotFoundError:
             res.append(dict(name=v["name"], title=v["title"], ok=False, error="OpenSCAD is not installed on this machine"))
         except subprocess.TimeoutExpired:

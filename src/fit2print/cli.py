@@ -206,6 +206,8 @@ def cmd_render(args):
     marker = read_marker(args.project)
     for r in render_mod.render(args.project, marker):
         print(f"{'ok  ' if r['ok'] else 'FAIL'}  {r['title']} -> renders/{r['name']}.png" + ("" if r["ok"] else f"  ({r['error']})"))
+        if r.get("same_as"):
+            print(f"WARN  {r['name']} is the SAME picture as {r['same_as']} (same part, same angle): give it a different view = \"front\", \"side\" ... or angle")
     for r in modelview.build(args.project, marker):
         print(f"{'ok  ' if r['ok'] else 'skip'}  3D view: {r['name']}" + ("" if r["ok"] else f"  ({r['error']})"))
     return 0
