@@ -101,8 +101,8 @@ def hardware_detail(hid, flash=""):
     src = "".join(f"<li><a href='{esc(s)}'>{esc(s)}</a></li>" for s in e.get("sources", []) if s.startswith("http"))
     return page(e.get("name", hid), f"""<p><a href='/hardware'>&larr; Components</a></p><h1>{esc(e.get('name', hid))}</h1>
 {('<div class=flash>' + esc(flash) + '</div>') if flash else ''}<p class=sub>{esc(e.get('note', ''))}</p>
-<div class=card><table style='width:100%;border-collapse:collapse;font-size:14px'><tr style='text-align:left;color:var(--mute)'><th>Dimension (bold = the fit depends on it)</th><th>Published</th><th>Status</th><th>Source</th><th>Your measurement</th></tr>{''.join(rows)}</table></div>
 {componentview.card(hid, e)}
+<div class=card><table style='width:100%;border-collapse:collapse;font-size:14px'><tr style='text-align:left;color:var(--mute)'><th>Dimension (bold = the fit depends on it)</th><th>Published</th><th>Status</th><th>Source</th><th>Your measurement</th></tr>{''.join(rows)}</table></div>
 {('<div class=card><b>Sources</b><ul>' + src + '</ul></div>') if src else ''}
 <style>td,th{{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}}</style>""")
 
