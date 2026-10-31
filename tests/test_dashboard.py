@@ -15,6 +15,11 @@ class State(unittest.TestCase):
     def test_printing(self): self.assertEqual(self.st(prints=[dict(plate="pod_L (x)", result="printing")]), "onprinter")
     def test_failed_beats_a_pass(self): self.assertEqual(self.st(runs=[dict(part="pod_L", verdict="PASS")], prints=[dict(plate="pod_L", result="failed")]), "bad")
     def test_name_must_match_whole(self): self.assertEqual(self.st(prints=[dict(plate="pod_L_extra", result="ok")]), "none")
+    def test_superseded_means_reprint_needed(self): self.assertEqual(self.st(prints=[dict(plate="pod_L", result="ok"), dict(plate="pod_L (old design)", result="superseded")]), "reprint")
+    def test_a_later_note_that_only_mentions_the_part_does_not_clear_it(self):   # negative control: a dry-fit entry about another plate
+        self.assertEqual(self.st(prints=[dict(plate="pod_L", result="superseded"), dict(plate="pod_R on pod_L fit", result="ok")]), "reprint")
+    def test_a_later_print_of_the_part_clears_it(self): self.assertEqual(self.st(prints=[dict(plate="pod_L", result="superseded"), dict(plate="pod_L reprint", result="ok")]), "printed")
+    def test_a_prepared_plate_does_not_clear_it(self): self.assertEqual(self.st(prints=[dict(plate="pod_L", result="superseded"), dict(plate="pod_L (new plate)", result="pending")]), "reprint")
     def test_newest_print_wins(self): self.assertEqual(self.st(prints=[dict(plate="pod_L", result="failed"), dict(plate="pod_L v2", result="ok")]), "printed")
 
 class Page(unittest.TestCase):

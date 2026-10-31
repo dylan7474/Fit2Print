@@ -291,6 +291,7 @@ def summarise(data):
     total = len(data["parts"])
     if cards.get("onprinter"): chip = ("printing now", "violet")
     elif cards.get("bad"): chip = ("needs a fix", "red")
+    elif cards.get("reprint"): chip = ("reprint needed", "orange")
     elif cards.get("look"): chip = ("needs a look", "amber")
     elif cards.get("ready"): chip = ("ready to print", "blue")
     elif cards.get("printed") and cards["printed"] == total: chip = ("all printed", "green")
@@ -299,6 +300,7 @@ def summarise(data):
     for p in data["parts"]:
         st, lp, lr, _ = dashboard.part_state(p, data["runs"], data["prints"])
         if st == "onprinter": needs.append(f"send a photo of {p['name']} when it finishes")
+        if st == "reprint": needs.append(f"reprint {p['name']}: it was printed from an older design")
     looks = [p["name"] for p in data["parts"] if dashboard.part_state(p, data["runs"], data["prints"])[0] in ("look", "bad")]
     if looks: needs.append(f"{len(looks)} part(s) want a look ({', '.join(looks[:3])}{'...' if len(looks) > 3 else ''})")
     for t in data["open_items"][:2]:

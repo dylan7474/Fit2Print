@@ -53,7 +53,7 @@ def picture_url(pid, folder, pic):
     return None
 
 def part_status(name, data):
-    """('printed' | 'ready' | 'look' | 'onprinter' | 'bad' | 'none', note) for a printed part, using the project's own records."""
+    """('printed' | 'ready' | 'look' | 'onprinter' | 'bad' | 'reprint' | 'none', note) for a printed part, using the project's own records."""
     known = [p for p in data["parts"] if p["name"] == name]
     if not known:
         return "none", "not in this project's parts list"
@@ -63,5 +63,5 @@ def part_status(name, data):
         note = "printed from an older design: the part has changed since"
     return st, note
 
-LABEL = dict(printed="printed", ready="not printed yet", look="not printed yet (a check wants a look)", onprinter="printing now", bad="needs a fix", none="not checked yet")
-COLOUR = dict(printed="green", ready="blue", look="amber", onprinter="violet", bad="red", none="grey")
+LABEL = dict(printed="printed", ready="not printed yet", look="not printed yet (a check wants a look)", onprinter="printing now", bad="needs a fix", reprint="printed, but needs a reprint", none="not checked yet")
+COLOUR = dict(printed="green", ready="blue", look="amber", onprinter="violet", bad="red", reprint="orange", none="grey")
