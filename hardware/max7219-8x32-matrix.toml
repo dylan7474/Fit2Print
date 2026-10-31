@@ -1,0 +1,121 @@
+id = "max7219-8x32-matrix"
+name = "8x32 dot-matrix LED module, 4-in-1 MAX7219 type (Youmile TS-YM-322 blue)"
+category = "display"
+sources = ["https://www.amazon.co.uk/dp/B099F1YPQZ", "https://www.az-delivery.de/en/products/4-x-64er-led-matrix-display", "https://shillehtek.com/blogs/shillehtek-product-manuals/max7219-4-in-1-dot-matrix-display-module-red-manual"]
+retrieved = "2026-10-31"
+note = "NO official drawing exists for this module. The sizes below are what third-party sellers quote for the common 4-in-1 MAX7219 board; they disagree by a few mm (128 to 132 long, 32 to 33 wide, 14 to 15 mm tall), and the Amazon listing gives only the PACKAGE size. Measure the real module before printing anything. Origin = the board's near-left corner, x along its length, y across, z up from the underside of the board."
+
+[dim.pcb_length]
+value = 128.0
+unit = "mm"
+basis = "third-party"
+source = "seller listings (az-delivery.de, shillehtek manual and others agree on 128 x 32 mm; heights 14-15 mm); no official datasheet"
+critical = true
+
+[dim.pcb_width]
+value = 32.0
+unit = "mm"
+basis = "third-party"
+source = "seller listings (az-delivery.de, shillehtek manual and others agree on 128 x 32 mm; heights 14-15 mm); no official datasheet"
+critical = true
+
+[dim.pcb_thickness]
+value = 1.6
+unit = "mm"
+basis = "estimate"
+source = "typical board: measure"
+critical = false
+
+[dim.overall_height]
+value = 14.0
+unit = "mm"
+basis = "third-party"
+source = "seller listings (az-delivery.de, shillehtek manual and others agree on 128 x 32 mm; heights 14-15 mm); no official datasheet (up to 15 mm; one listing says 19.5 mm including pins)"
+critical = true
+
+[dim.matrix_height]
+value = 8.0
+unit = "mm"
+basis = "estimate"
+source = "the four 8x8 LED blocks stand about this far above the board: measure"
+critical = true
+
+[dim.hole_d]
+value = 3.2
+unit = "mm"
+basis = "estimate"
+source = "sellers say M3 holes in the corners: measure"
+critical = true
+
+[dim.hole_inset_x]
+value = 3.0
+unit = "mm"
+basis = "estimate"
+source = "sellers do not give the hole positions: this is a guess at the distance from the short edge: measure"
+critical = true
+
+[dim.hole_inset_y]
+value = 3.0
+unit = "mm"
+basis = "estimate"
+source = "sellers do not give the hole positions: this is a guess at the distance from the long edge: measure"
+critical = true
+
+[dim.connector_height]
+value = 8.5
+unit = "mm"
+basis = "estimate"
+source = "a 5-pin header at one end, about this tall: measure"
+critical = false
+
+[shape]
+note = "Outline only: the board and overall height are seller figures, the LED blocks and header are estimates, and the corner holes are placed by guess. Everything is unverified until you measure the real module."
+
+[[shape.part]]
+name = "pcb"
+label = "Board"
+colour = "#0B3C8C"
+type = "box"
+at = [0, 0, 0]
+size = ["pcb_length", "pcb_width", "pcb_thickness"]
+holes = [["hole_inset_x", "hole_inset_y", "hole_d"], ["pcb_length-hole_inset_x", "hole_inset_y", "hole_d"], ["hole_inset_x", "pcb_width-hole_inset_y", "hole_d"], ["pcb_length-hole_inset_x", "pcb_width-hole_inset_y", "hole_d"]]
+
+[[shape.part]]
+name = "matrix-1"
+label = "LED block 1"
+colour = "#1A1A1A"
+type = "box"
+at = ["0*pcb_length/4", 0, "pcb_thickness"]
+size = ["pcb_length/4", "pcb_width", "matrix_height"]
+
+[[shape.part]]
+name = "matrix-2"
+label = "LED block 2"
+colour = "#1A1A1A"
+type = "box"
+at = ["1*pcb_length/4", 0, "pcb_thickness"]
+size = ["pcb_length/4", "pcb_width", "matrix_height"]
+
+[[shape.part]]
+name = "matrix-3"
+label = "LED block 3"
+colour = "#1A1A1A"
+type = "box"
+at = ["2*pcb_length/4", 0, "pcb_thickness"]
+size = ["pcb_length/4", "pcb_width", "matrix_height"]
+
+[[shape.part]]
+name = "matrix-4"
+label = "LED block 4"
+colour = "#1A1A1A"
+type = "box"
+at = ["3*pcb_length/4", 0, "pcb_thickness"]
+size = ["pcb_length/4", "pcb_width", "matrix_height"]
+
+[[shape.part]]
+name = "connector"
+label = "5-pin header (one end)"
+colour = "#222222"
+type = "box"
+at = [1.0, "pcb_width/2-6.4", "pcb_thickness"]
+size = [2.54, 12.7, "connector_height"]

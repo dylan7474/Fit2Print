@@ -20,6 +20,7 @@ class Shapes(unittest.TestCase):
         self.assertEqual(ps["pcb"]["size"], [60.0, 30.0, 1.5]); self.assertEqual(ps["pcb"]["holes"][1], [57.0, 27.0, 2.5])
         self.assertEqual(ps["pcb"]["status"], "unverified")                      # it rests on the estimated thickness
         self.assertEqual(ps["flat"]["size"], [30.0, 15.0, 1.0])
+        self.assertEqual(ps["flat"]["status"], "official")                       # it sits on the estimated thickness but its own size is from the drawing
     def test_measuring_makes_it_measured_and_changes_the_cache_key(self):
         before = componentview.key(ENTRY)
         e = json.loads(json.dumps(ENTRY)); e["dim"]["thick"]["measured"] = dict(value=1.6, on="2026-10-31", how="callipers")

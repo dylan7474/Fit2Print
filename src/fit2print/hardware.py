@@ -130,7 +130,10 @@ def shape_parts(entry):
         c = str(sp.get("colour", "#8FA3BF"))
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", c): raise ValueError(f"shape part {sp['name']}: colour must look like #3A7BD5")
         ev = lambda x: _eval(x, dims, used)
-        part = dict(name=sp["name"], label=str(sp.get("label", sp["name"])), colour=c.upper(), type=typ, at=[ev(x) for x in sp.get("at", [0, 0, 0])])
+        at = list(sp.get("at", [0, 0, 0]))
+        # a piece's status rests on the sizes that make ITS OWN shape and its place along the board; the height it sits at (usually the board's thickness) is
+        # worked out without counting, or every piece on a board with an estimated thickness would be unverified
+        part = dict(name=sp["name"], label=str(sp.get("label", sp["name"])), colour=c.upper(), type=typ, at=[ev(at[0]), ev(at[1]), _eval(at[2], dims, set())])
         if typ == "box":
             part["size"] = [ev(x) for x in sp["size"]]
             part["holes"] = [[ev(x) for x in h] for h in sp.get("holes", [])]

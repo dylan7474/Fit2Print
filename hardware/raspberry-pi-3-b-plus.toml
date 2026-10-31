@@ -1,0 +1,540 @@
+id = "raspberry-pi-3-b-plus"
+name = "Raspberry Pi 3 Model B+ (the Model B has the same footprint)"
+category = "board"
+sources = ["https://pip-assets.raspberrypi.com/categories/532-raspberry-pi-3-model-b/documents/RP-008337-DS-2-raspberry-pi-3-b-plus-mechanical-drawing.pdf"]
+retrieved = "2026-10-31"
+note = "From the official Pi 3 B+ mechanical drawing (read 2026-10-31). Origin = the board's near-left corner as drawn: x along the long edge from the end with the micro USB power socket, y from the near long edge (the one with HDMI, audio and power) up to the GPIO header edge. The drawing gives the Z-height of the big connectors; the rest of each connector outline is scaled off the drawing."
+
+[dim.length]
+value = 85.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+)"
+critical = true
+
+[dim.width]
+value = 56.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+)"
+critical = true
+
+[dim.hole_inset]
+value = 3.5
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+): holes are 3.5 mm in from the left end and from both long edges"
+critical = true
+
+[dim.hole_dx]
+value = 58.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+): holes 58 mm apart along the long edge"
+critical = true
+
+[dim.hole_dy]
+value = 49.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+): holes 49 mm apart across the board"
+critical = true
+
+[dim.hole_d]
+value = 2.75
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+): the 2.75 mm hole dimension"
+critical = true
+
+[dim.pcb_thickness]
+value = 1.4
+unit = "mm"
+basis = "estimate"
+source = "typical Raspberry Pi board; not on the drawing: measure"
+critical = false
+
+[dim.header_x]
+value = 7.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.header_y]
+value = 49.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.header_sx]
+value = 50.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.header_sy]
+value = 5.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.header_h]
+value = 8.5
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+) (the Z-Height label)"
+critical = true
+
+[dim.usb_a_x]
+value = 69.5
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.usb_a_y]
+value = 40.4
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.usb_a_sx]
+value = 17.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.usb_a_sy]
+value = 12.9
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.usb_a_h]
+value = 16.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+) (the Z-Height label)"
+critical = true
+
+[dim.usb_b_x]
+value = 69.5
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.usb_b_y]
+value = 22.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.usb_b_sx]
+value = 17.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.usb_b_sy]
+value = 14.0
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.usb_b_h]
+value = 16.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+) (the Z-Height label)"
+critical = true
+
+[dim.ethernet_x]
+value = 65.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.ethernet_y]
+value = 2.4
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.ethernet_sx]
+value = 21.5
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.ethernet_sy]
+value = 15.5
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.ethernet_h]
+value = 13.5
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+) (the Z-Height label)"
+critical = true
+
+[dim.power_x]
+value = 6.7
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.power_y]
+value = -1.2
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.power_sx]
+value = 8.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.power_sy]
+value = 5.9
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.power_h]
+value = 2.7
+unit = "mm"
+basis = "estimate"
+source = "typical micro USB socket: not labelled on the drawing: measure"
+critical = false
+
+[dim.hdmi_x]
+value = 24.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.hdmi_y]
+value = -1.5
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.hdmi_sx]
+value = 14.6
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.hdmi_sy]
+value = 12.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.hdmi_h]
+value = 6.5
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+) (the Z-Height label)"
+critical = true
+
+[dim.audio_x]
+value = 50.0
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.audio_y]
+value = -2.6
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.audio_sx]
+value = 7.0
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.audio_sy]
+value = 15.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.audio_h]
+value = 6.0
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+) (the Z-Height label)"
+critical = true
+
+[dim.csi_x]
+value = 44.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.csi_y]
+value = 0.0
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.csi_sx]
+value = 3.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.csi_sy]
+value = 22.7
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.csi_h]
+value = 5.5
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+) (the Z-Height label)"
+critical = true
+
+[dim.dsi_x]
+value = 2.7
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.dsi_y]
+value = 16.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.dsi_sx]
+value = 2.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.dsi_sy]
+value = 22.8
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.dsi_h]
+value = 5.5
+unit = "mm"
+basis = "official"
+source = "official mechanical drawing RP-008337 (Pi 3 B+) (the Z-Height label)"
+critical = true
+
+[dim.soc_x]
+value = 20.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.soc_y]
+value = 24.6
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.soc_sx]
+value = 13.9
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.soc_sy]
+value = 13.9
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.soc_h]
+value = 1.0
+unit = "mm"
+basis = "estimate"
+source = "a flat chip about this tall: not on the drawing"
+critical = false
+
+[dim.wifi_x]
+value = 6.6
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.wifi_y]
+value = 36.1
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.wifi_sx]
+value = 10.5
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.wifi_sy]
+value = 13.2
+unit = "mm"
+basis = "derived"
+source = "scaled off the official drawing's outline: about +/- 0.3 mm"
+critical = false
+
+[dim.wifi_h]
+value = 1.2
+unit = "mm"
+basis = "estimate"
+source = "a flat module about this tall: not on the drawing"
+critical = false
+
+[shape]
+note = "Board, holes and connectors follow the official drawing, including the heights of the header, USB, Ethernet, HDMI, audio and ribbon connectors. Unlabelled heights (micro USB, chips, board thickness) are estimates."
+
+[[shape.part]]
+name = "pcb"
+label = "Board"
+colour = "#2E7D32"
+type = "box"
+at = [0, 0, 0]
+size = ["length", "width", "pcb_thickness"]
+holes = [["hole_inset", "hole_inset", "hole_d"], ["hole_inset+hole_dx", "hole_inset", "hole_d"], ["hole_inset", "hole_inset+hole_dy", "hole_d"], ["hole_inset+hole_dx", "hole_inset+hole_dy", "hole_d"]]
+
+[[shape.part]]
+name = "header"
+label = "40-pin header"
+colour = "#222222"
+type = "box"
+at = ["header_x", "header_y", "pcb_thickness"]
+size = ["header_sx", "header_sy", "header_h"]
+
+[[shape.part]]
+name = "usb_a"
+label = "USB (upper pair)"
+colour = "#B8B8B8"
+type = "box"
+at = ["usb_a_x", "usb_a_y", "pcb_thickness"]
+size = ["usb_a_sx", "usb_a_sy", "usb_a_h"]
+
+[[shape.part]]
+name = "usb_b"
+label = "USB (lower pair)"
+colour = "#B8B8B8"
+type = "box"
+at = ["usb_b_x", "usb_b_y", "pcb_thickness"]
+size = ["usb_b_sx", "usb_b_sy", "usb_b_h"]
+
+[[shape.part]]
+name = "ethernet"
+label = "Ethernet"
+colour = "#B0B6BC"
+type = "box"
+at = ["ethernet_x", "ethernet_y", "pcb_thickness"]
+size = ["ethernet_sx", "ethernet_sy", "ethernet_h"]
+
+[[shape.part]]
+name = "power"
+label = "Micro USB power"
+colour = "#B8B8B8"
+type = "box"
+at = ["power_x", "power_y", "pcb_thickness"]
+size = ["power_sx", "power_sy", "power_h"]
+
+[[shape.part]]
+name = "hdmi"
+label = "HDMI"
+colour = "#B8B8B8"
+type = "box"
+at = ["hdmi_x", "hdmi_y", "pcb_thickness"]
+size = ["hdmi_sx", "hdmi_sy", "hdmi_h"]
+
+[[shape.part]]
+name = "audio"
+label = "Audio jack"
+colour = "#2B2B2B"
+type = "box"
+at = ["audio_x", "audio_y", "pcb_thickness"]
+size = ["audio_sx", "audio_sy", "audio_h"]
+
+[[shape.part]]
+name = "csi"
+label = "Camera connector"
+colour = "#E8E2D0"
+type = "box"
+at = ["csi_x", "csi_y", "pcb_thickness"]
+size = ["csi_sx", "csi_sy", "csi_h"]
+
+[[shape.part]]
+name = "dsi"
+label = "Display connector"
+colour = "#E8E2D0"
+type = "box"
+at = ["dsi_x", "dsi_y", "pcb_thickness"]
+size = ["dsi_sx", "dsi_sy", "dsi_h"]
+
+[[shape.part]]
+name = "soc"
+label = "Processor"
+colour = "#555555"
+type = "box"
+at = ["soc_x", "soc_y", "pcb_thickness"]
+size = ["soc_sx", "soc_sy", "soc_h"]
+
+[[shape.part]]
+name = "wifi"
+label = "Wi-Fi module"
+colour = "#C9CED3"
+type = "box"
+at = ["wifi_x", "wifi_y", "pcb_thickness"]
+size = ["wifi_sx", "wifi_sy", "wifi_h"]

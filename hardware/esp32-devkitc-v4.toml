@@ -1,0 +1,170 @@
+id = "esp32-devkitc-v4"
+name = "Espressif ESP32-DevKitC V4 (ESP32-WROOM-32)"
+category = "board"
+sources = ["https://docs.espressif.com/projects/esp-idf/en/v5.2.2/esp32/_images/esp32-devkitc-dimensions-back.jpg", "https://dl.espressif.com/dl/schematics/esp32_devkitc_v4_pcb_layout.pdf", "https://docs.espressif.com/projects/esp-idf/en/v5.2.2/esp32/hw-reference/esp32/get-started-devkitc.html"]
+retrieved = "2026-10-31"
+note = "From Espressif's own dimension drawing (54.4 x 27.9 mm overall, with the antenna module overhanging the board) and its PCB layout (the board itself is 48.2 x 27.9 mm), read 2026-10-31. Third-party sites quoting 54 x 27 or 54 x 28 are describing the overall size. Origin = the USB end of the board, x along its length, y across, z up from the underside of the board. Heights are NOT on Espressif's drawing."
+
+[dim.pcb_length]
+value = 48.2
+unit = "mm"
+basis = "official"
+source = "Espressif ESP32-DevKitC V4 dimension drawing and PCB layout PDF (48.2 mm, the board without the antenna overhang)"
+critical = true
+
+[dim.pcb_width]
+value = 27.9
+unit = "mm"
+basis = "official"
+source = "Espressif ESP32-DevKitC V4 dimension drawing and PCB layout PDF (27.9 mm)"
+critical = true
+
+[dim.total_length]
+value = 54.4
+unit = "mm"
+basis = "official"
+source = "Espressif dimension drawing (54.4 mm including the antenna module overhanging the board)"
+critical = true
+
+[dim.row_spacing]
+value = 25.4
+unit = "mm"
+basis = "derived"
+source = "scaled off the PCB layout: the two pin rows are 1 inch apart; check against the real board"
+critical = false
+
+[dim.pcb_thickness]
+value = 1.6
+unit = "mm"
+basis = "estimate"
+source = "typical board: not on the drawing: measure"
+critical = false
+
+[dim.header_length]
+value = 48.26
+unit = "mm"
+basis = "derived"
+source = "19 pins at 2.54 mm: check the count on the real board"
+critical = false
+
+[dim.header_housing_h]
+value = 2.5
+unit = "mm"
+basis = "estimate"
+source = "typical 2.54 mm pin-header housing: measure"
+critical = false
+
+[dim.pins_below]
+value = 6.0
+unit = "mm"
+basis = "estimate"
+source = "the pins stand this far below the board on a typical DevKitC: measure"
+critical = true
+
+[dim.module_length]
+value = 25.5
+unit = "mm"
+basis = "estimate"
+source = "ESP32-WROOM-32 module, 25.5 mm long, remembered from its datasheet and not re-checked today"
+critical = false
+
+[dim.module_width]
+value = 18.0
+unit = "mm"
+basis = "estimate"
+source = "ESP32-WROOM-32 module, 18 mm wide, remembered from its datasheet and not re-checked today"
+critical = false
+
+[dim.module_height]
+value = 3.1
+unit = "mm"
+basis = "estimate"
+source = "ESP32-WROOM-32 module, 3.1 mm tall, remembered from its datasheet and not re-checked today"
+critical = true
+
+[dim.usb_width]
+value = 7.5
+unit = "mm"
+basis = "estimate"
+source = "typical micro USB B socket: not on the drawing: measure"
+critical = true
+
+[dim.usb_depth]
+value = 5.6
+unit = "mm"
+basis = "estimate"
+source = "typical micro USB B socket: not on the drawing: measure"
+critical = false
+
+[dim.usb_height]
+value = 2.8
+unit = "mm"
+basis = "estimate"
+source = "typical micro USB B socket: not on the drawing: measure"
+critical = true
+
+[dim.usb_overhang]
+value = 1.0
+unit = "mm"
+basis = "estimate"
+source = "the socket usually stands about 1 mm beyond the board edge: measure"
+critical = true
+
+[shape]
+note = "Outline only: the board and the overall length are Espressif's figures; the connector, header and module sizes are estimates (marked unverified) until you measure the real board."
+
+[[shape.part]]
+name = "pcb"
+label = "Board"
+colour = "#1B5E20"
+type = "box"
+at = [0, 0, 0]
+size = ["pcb_length", "pcb_width", "pcb_thickness"]
+
+[[shape.part]]
+name = "module"
+label = "ESP32 module (antenna end)"
+colour = "#1F1F1F"
+type = "box"
+at = ["total_length-module_length", "(pcb_width-module_width)/2", "pcb_thickness"]
+size = ["module_length", "module_width", "module_height"]
+
+[[shape.part]]
+name = "usb"
+label = "Micro USB socket"
+colour = "#B8B8B8"
+type = "box"
+at = ["-usb_overhang", "(pcb_width-usb_width)/2", "pcb_thickness"]
+size = ["usb_depth", "usb_width", "usb_height"]
+
+[[shape.part]]
+name = "header-a"
+label = "Pin row (long edge)"
+colour = "#222222"
+type = "box"
+at = [0, "(pcb_width-row_spacing)/2-1.27", "pcb_thickness"]
+size = ["header_length", 2.54, "header_housing_h"]
+
+[[shape.part]]
+name = "header-b"
+label = "Pin row (other edge)"
+colour = "#222222"
+type = "box"
+at = [0, "(pcb_width+row_spacing)/2-1.27", "pcb_thickness"]
+size = ["header_length", 2.54, "header_housing_h"]
+
+[[shape.part]]
+name = "pins-a"
+label = "Pins below (row 1)"
+colour = "#B08D57"
+type = "box"
+at = [0, "(pcb_width-row_spacing)/2-0.5", "-pins_below"]
+size = ["header_length", 1.0, "pins_below"]
+
+[[shape.part]]
+name = "pins-b"
+label = "Pins below (row 2)"
+colour = "#B08D57"
+type = "box"
+at = [0, "(pcb_width+row_spacing)/2-0.5", "-pins_below"]
+size = ["header_length", 1.0, "pins_below"]

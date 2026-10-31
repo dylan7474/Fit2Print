@@ -1,0 +1,111 @@
+id = "max98357a-breakout"
+name = "MAX98357A I2S amplifier breakout (Adafruit 3006 size)"
+category = "amplifier"
+sources = ["https://www.adafruit.com/product/3006", "https://thepihut.com/products/adafruit-i2s-3w-class-d-amplifier-breakout-max98357a"]
+retrieved = "2026-10-31"
+note = "Board size from Adafruit's listing (it publishes no drawing; the hole positions are not given). The 13.0 mm hole spacing is what fitted the user's actual module best on the Phonosphere spacing test of 2026-10-16 (a clone). Origin = the header-edge corner: x along the header edge, y from the header edge to the terminal-block edge, z up from the underside."
+
+[dim.board_width]
+value = 17.8
+unit = "mm"
+basis = "third-party"
+source = "Adafruit product 3006 listing (19.4 x 17.8 x 3.0 mm); clones vary 17.5-17.8 x 18.8-19.4 mm: along the header and terminal edges"
+critical = true
+
+[dim.board_height]
+value = 19.4
+unit = "mm"
+basis = "third-party"
+source = "Adafruit product 3006 listing (19.4 x 17.8 x 3.0 mm); clones vary 17.5-17.8 x 18.8-19.4 mm: from the header edge to the terminal edge"
+critical = true
+
+[dim.pcb_thickness]
+value = 1.6
+unit = "mm"
+basis = "notes"
+source = "Phonosphere model (amp_pcb): measure"
+critical = false
+
+[dim.hole_dx]
+value = 13.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere spacing test 2026-10-16: the 13.0 mm pair fitted the user's module best"
+critical = true
+
+[dim.hole_from_terminal]
+value = 2.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere model (amp_hole_in): the holes' centres from the terminal edge"
+critical = true
+
+[dim.hole_d]
+value = 2.2
+unit = "mm"
+basis = "estimate"
+source = "for M2 self-tappers: measure"
+critical = true
+
+[dim.terminal_w]
+value = 10.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere clearance block (10 x 8 x 7 mm) for the screw terminal: measure"
+critical = false
+
+[dim.terminal_d]
+value = 8.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere clearance block: measure"
+critical = false
+
+[dim.terminal_h]
+value = 7.0
+unit = "mm"
+basis = "notes"
+source = "Phonosphere clearance block: measure"
+critical = false
+
+[dim.header_depth]
+value = 8.5
+unit = "mm"
+basis = "notes"
+source = "Phonosphere clearance block for the header and its solder tails: measure"
+critical = false
+
+[dim.header_h]
+value = 2.5
+unit = "mm"
+basis = "notes"
+source = "Phonosphere clearance block: measure"
+critical = false
+
+[shape]
+note = "Outline only: the board size is Adafruit's; the terminal block and header are Phonosphere's clearance blocks, not true shapes. Unverified until you measure the real module."
+
+[[shape.part]]
+name = "pcb"
+label = "Board"
+colour = "#5B2A86"
+type = "box"
+at = [0, 0, 0]
+size = ["board_width", "board_height", "pcb_thickness"]
+holes = [["board_width/2-hole_dx/2", "board_height-hole_from_terminal", "hole_d"], ["board_width/2+hole_dx/2", "board_height-hole_from_terminal", "hole_d"]]
+
+[[shape.part]]
+name = "header"
+label = "Header (solder tails)"
+colour = "#222222"
+type = "box"
+at = [0, 0, "pcb_thickness"]
+size = ["board_width", "header_depth", "header_h"]
+
+[[shape.part]]
+name = "terminal"
+label = "Screw terminal"
+colour = "#2E7D32"
+type = "box"
+at = ["(board_width-terminal_w)/2", "board_height-terminal_d", "pcb_thickness"]
+size = ["terminal_w", "terminal_d", "terminal_h"]
