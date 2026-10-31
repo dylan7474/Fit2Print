@@ -65,14 +65,16 @@ def assistant_card(pid, folder, name, a, start=False, desc=""):
 const FIRST={json.dumps(first)};
 function add(cls,t){{const d=document.createElement('div');d.className='bub '+cls;d.textContent=t;const e=chat.querySelector('.small');if(e&&!e.className.includes('bub'))e.remove();chat.appendChild(d);d.scrollIntoView({{block:'nearest'}})}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function refreshCard(){{try{{const t=await (await fetch(location.href,{{credentials:'same-origin'}})).text();const d=new DOMParser().parseFromString(t,'text/html');
+ const a=document.getElementById('rcard'),b=d.getElementById('rcard');if(a&&b&&a.innerHTML!==b.innerHTML){{a.innerHTML=b.innerHTML;a.querySelectorAll('script').forEach(s=>{{const n=document.createElement('script');n.textContent=s.textContent;s.replaceWith(n)}})}}}}catch(e){{}}}}
 async function ask(msg){{add('me',msg);btn.disabled=true;w.style.display='block';w.textContent='thinking...';
  const r=await fetch('/p/'+pid+'/ask',{{method:'POST',headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:'message='+encodeURIComponent(msg)}});
  if(!r.ok){{add('err',await r.text());btn.disabled=false;w.style.display='none';return}}
- const {{job}}=await r.json();let n=0;
+ const {{job}}=await r.json();let n=0,k=0;
  for(;;){{const p=await (await fetch('/p/'+pid+'/ask/'+job+'?n='+n)).json();n=p.next;
   for(const e of p.events){{if(e.kind=='tool')w.textContent=e.text+'...';else if(e.kind=='text')add('ai',e.text);else if(e.kind=='error')add('err',e.text)}}
-  if(p.done)break;await sleep(1000)}}
- w.style.display='none';btn.disabled=false;}}
+  if(p.done)break;if(++k%6==0)await refreshCard();await sleep(1000)}}
+ await refreshCard();w.style.display='none';btn.disabled=false;}}
 document.getElementById('askform').addEventListener('submit',ev=>{{ev.preventDefault();const m=box.value.trim();if(!m)return;box.value='';ask(m)}});
 const stash=sessionStorage.getItem('f2p-start-'+pid);if(stash){{sessionStorage.removeItem('f2p-start-'+pid);ask(stash)}}else if({auto})ask(FIRST);}})();</script>"""
 
@@ -590,7 +592,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><span><a class=btn href='/p/{pid}/log'>Log a print</a> {archive_button(pid, folder, mk)}</span></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))

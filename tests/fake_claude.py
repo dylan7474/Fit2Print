@@ -15,6 +15,9 @@ out({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "
 out({"type": "assistant", "message": {"content": [{"type": "text", "text": "Which board is it for?"}]}})
 if "TAMPER" in msg:
     t = open("fit2print.toml").read().replace('id = "assist-test"', 'id = "hijacked"'); open("fit2print.toml", "w").write(t)
+if "DRAW" in msg:
+    import base64, time; time.sleep(1.5); os.makedirs("concept", exist_ok=True)
+    open("concept/first.png", "wb").write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
 if "WRITE" in msg:
     open("brief.md", "a").write("\nwritten by the fake assistant\n")
 out({"type": "result", "subtype": "success", "is_error": "ERRORRESULT" in msg, "result": "Which board is it for?", "session_id": "S1", "total_cost_usd": 0.01})
