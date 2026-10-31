@@ -106,6 +106,24 @@ def hardware_detail(hid, flash=""):
 {('<div class=card><b>Sources</b><ul>' + src + '</ul></div>') if src else ''}
 <style>td,th{{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}}</style>""")
 
+def components_card(marker):
+    """'Components it uses': the library parts the design is built round, each with how many sizes still need measuring and a link to its 3D shape."""
+    ids = [str(i) for i in (marker.get("components") or [])]
+    if not ids:
+        return ""
+    lib = hw_mod.load_all(); rows = []
+    for i in ids:
+        e = lib.get(i)
+        if not e:
+            rows.append(f"<div class=row style='padding:7px 0;border-top:1px solid var(--line)'><b>{esc(i)}</b><span class='small' style='color:#b02a2a'>not in the component library: add it, never use numbers from memory</span></div>")
+            continue
+        todo = hw_mod.unverified(e)
+        chip = "<span class='chip green'>all measured</span>" if not todo else f"<span class='chip amber'>{len(todo)} to measure</span>"
+        more = (" &middot; " + esc(", ".join(k.replace("_", " ") for k in todo[:4])) + ("..." if len(todo) > 4 else "")) if todo else ""
+        shape = " &middot; 3D shape" if componentview.has_shape(e) else ""
+        rows.append(f"<div class=row style='padding:7px 0;border-top:1px solid var(--line)'><div><a href='/hardware/{esc(i)}'><b>{esc(e.get('name', i))}</b></a><div class=small>{esc(e.get('category', ''))}{shape}{more}</div></div>{chip}</div>")
+    return f"<div class=card><h3>Components it uses</h3><div class=small>Real parts from the component library. Open one to see its shape and measure it.</div>{''.join(rows)}</div>"
+
 def plate_card(pid, folder, marker):
     """'Layer preview': the sliced plates this project has on this machine, each a link to the layer-by-layer viewer."""
     pl = layerview.discover(folder, marker)
@@ -614,7 +632,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><span><a class=btn href='/p/{pid}/log'>Log a print</a> {archive_button(pid, folder, mk)}</span></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + modelview.card(pid, folder) + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + modelview.card(pid, folder) + components_card(mk) + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))

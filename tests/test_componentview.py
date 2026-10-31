@@ -84,3 +84,10 @@ class Browser(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class Panel(unittest.TestCase):
+    def test_components_card(self):
+        self.assertEqual(server.components_card({}), "")
+        c = server.components_card(dict(components=["pi-zero-2-w", "no-such-part"]))
+        self.assertIn("Raspberry Pi Zero 2 W", c); self.assertIn("to measure", c); self.assertIn("/hardware/pi-zero-2-w", c); self.assertIn("3D shape", c)
+        self.assertIn("not in the component library", c)                    # NEGATIVE CONTROL: an unknown id is flagged, not silently dropped

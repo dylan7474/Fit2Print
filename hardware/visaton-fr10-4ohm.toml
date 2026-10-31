@@ -92,16 +92,16 @@ note = "Outline only, in the speaker's own frame: the front of the baffle is z =
 [[shape.part]]
 name = "frame"
 label = "Frame"
-colour = "#2B2B2B"
+colour = "#1E1E1E"
 type = "box"
 at = ["-frame_size/2", "-frame_size/2", 0]
 size = ["frame_size", "frame_size", "frame_thickness"]
-holes = [["mount_circle_diameter/2*0.7071", "mount_circle_diameter/2*0.7071", "slot_width"], ["-mount_circle_diameter/2*0.7071", "mount_circle_diameter/2*0.7071", "slot_width"], ["mount_circle_diameter/2*0.7071", "-mount_circle_diameter/2*0.7071", "slot_width"], ["-mount_circle_diameter/2*0.7071", "-mount_circle_diameter/2*0.7071", "slot_width"]]
+holes = [["mount_circle_diameter/2*0.7071", "mount_circle_diameter/2*0.7071", "slot_width"], ["-mount_circle_diameter/2*0.7071", "mount_circle_diameter/2*0.7071", "slot_width"], ["mount_circle_diameter/2*0.7071", "-mount_circle_diameter/2*0.7071", "slot_width"], ["-mount_circle_diameter/2*0.7071", "-mount_circle_diameter/2*0.7071", "slot_width"], [0, 0, "cone_diameter+4"]]
 
 [[shape.part]]
 name = "cone"
 label = "Cone"
-colour = "#444444"
+colour = "#5A5A5A"
 type = "cone"
 at = [0, 0, "-depth_behind_baffle+magnet_height+10"]
 d1 = 30
