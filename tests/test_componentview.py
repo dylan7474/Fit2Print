@@ -68,8 +68,10 @@ class Browser(unittest.TestCase):
                     async def js(e):
                         r = await call("Runtime.evaluate", expression=e, awaitPromise=True, returnByValue=True); return r.get("result", {}).get("value")
                     await call("Runtime.enable"); await call("Page.enable")
-                    await call("Page.navigate", url=f"http://127.0.0.1:{port}/hardware/pi-zero-2-w"); await asyncio.sleep(6)
-                    out["v0"] = await js("window.__f2pView||null")
+                    await call("Page.navigate", url=f"http://127.0.0.1:{port}/hardware/pi-zero-2-w")
+                    for _ in range(120):                                          # the first draw of the shape can take a few seconds
+                        await asyncio.sleep(0.5); out["v0"] = await js("window.__f2pView||null")
+                        if out["v0"]: break
                     out["text"] = await js("document.getElementById('m3p').innerText")
                     x, y = await js("(()=>{const b=document.getElementById('m3c').getBoundingClientRect();document.getElementById('m3c').scrollIntoView({block:'center'});const c=document.getElementById('m3c').getBoundingClientRect();return [c.x+c.width/2,c.y+c.height/2]})()")
                     await call("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", clickCount=1)

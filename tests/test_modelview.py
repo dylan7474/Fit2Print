@@ -114,8 +114,10 @@ class Browser(unittest.TestCase):
                         for t in ("mouseMoved", "mousePressed", "mouseReleased"): await call("Input.dispatchMouseEvent", type=t, x=x, y=y, button="left", clickCount=1)
                         return x, y
                     await call("Runtime.enable"); await call("Page.enable")
-                    await call("Page.navigate", url=f"http://127.0.0.1:{port}/p/view-test"); await asyncio.sleep(3)
-                    out["v0"] = await js("window.__f2pView||null")
+                    await call("Page.navigate", url=f"http://127.0.0.1:{port}/p/view-test")
+                    for _ in range(80):                                           # wait for the viewer itself, not a fixed time
+                        await asyncio.sleep(0.5); out["v0"] = await js("window.__f2pView||null")
+                        if out["v0"]: break
                     x, y = await click("#m3c")                                    # real drag on the canvas
                     await call("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", clickCount=1)
                     for k in range(1, 8): await call("Input.dispatchMouseEvent", type="mouseMoved", x=x + k * 12, y=y + k * 5, button="left", buttons=1)

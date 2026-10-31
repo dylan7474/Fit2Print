@@ -36,7 +36,10 @@ class CardRefresh(unittest.TestCase):
                     async def js(e):
                         r = await call("Runtime.evaluate", expression=e, awaitPromise=True, returnByValue=True); return r.get("result", {}).get("value")
                     await call("Runtime.enable"); await call("Page.enable")
-                    await call("Page.navigate", url=f"http://127.0.0.1:{port}/p/pic-browser-test"); await asyncio.sleep(2)
+                    await call("Page.navigate", url=f"http://127.0.0.1:{port}/p/pic-browser-test")
+                    for _ in range(60):
+                        await asyncio.sleep(0.5)
+                        if await js("document.readyState==='complete' && !!document.getElementById('msg')"): break
                     result["before"] = await js("document.querySelectorAll('#rcard img').length")
                     await js("window.__no_reload_marker = 1")
                     async def center(sel):
