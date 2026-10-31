@@ -106,7 +106,7 @@ footer{color:var(--mute);font-size:13px;margin-top:40px}
     o.append(f"<h1>{esc(project['name'])}</h1><p class='sub'>{esc(project['subtitle'])} &middot; made by Fit2Print on {today}</p>")
     ready = len(cards["ready"])
     o.append("<div class='stats'>" + "".join(f"<div class='stat'><b>{a}</b><span>{b}</span></div>" for a, b in [
-        (len(parts), "parts in the radio"), (n_printed, "printed"), (ready, "ready to print"), (len(cards["look"]) + len(cards["bad"]), "need a look or a fix"),
+        (len(parts), project.get("parts_label", "parts in this project")), (n_printed, "printed"), (ready, "ready to print"), (len(cards["look"]) + len(cards["bad"]), "need a look or a fix"),
         (f"{rem_min / 60:.0f} h", "print time still to go"), (f"{rem_g / 1000:.1f} kg", "filament still to go")]) + "</div>")
     o.append("<h2>What I need from you</h2><div class='needs'><ul>" + "".join(
         f"<li><span class='tag'>{esc(k)}</span>{('<code>' + esc(n) + '</code> ' if n else '')}{esc(t)}</li>" for k, n, t in needs) + "</ul></div>")

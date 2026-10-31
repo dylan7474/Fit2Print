@@ -9,10 +9,14 @@ treated by kind (`plan(marker)`):
   PUSH    (model, marker, ...)  the master's own files, copied to the server;
   PHOTOS                        copied both ways, never overwriting.
 The laptop copy is the master. New projects started on the phone page are brought home by `pull_new`.
+For an ordinary project (not the radio) EVERY file is treated like the TEXT kind, so what the assistant creates on the server (model.scad, concept sketches, an edited fit2print.toml) comes home, and what you change at home goes out, with the same never-overwrite rule. Big or generated folders (renders, plates, stl) are not mirrored: plates go out only.
 REMOTE is a folder, or host:folder reached over ssh."""
 import datetime, hashlib, json, os, shlex, subprocess, tempfile
 
 STATE = ".fit2print-sync.json"
+SKIP_DIRS = ("renders", "plates", "stl", "photos", ".git", "__pycache__")
+MAXSIZE = 3_000_000
+ARTEFACT = ("from-server-", "replaced-local-version-", "replaced-server-version-")
 
 def plan(marker, plates_dir=None, local=None):
     pics = []
@@ -28,8 +32,36 @@ def plan(marker, plates_dir=None, local=None):
         push.append(m)
     plates = [os.path.join("plates", f) for f in os.listdir(plates_dir) if f.endswith((".3mf", ".gcode"))] if plates_dir and os.path.isdir(plates_dir) else []
     push += pics + plates                                    # the guide's pictures and the sliced plates, so the server's layer preview can show them
-    return dict(append=[os.path.join("records", "plates.jsonl"), os.path.join("records", "prints.jsonl"), os.path.join("records", "assistant.jsonl")],
+    return dict(append=[os.path.join("records", "plates.jsonl"), os.path.join("records", "prints.jsonl"), os.path.join("records", "assistant.jsonl"), os.path.join("records", "stages.jsonl"), os.path.join("records", "archive.jsonl")],
                 text=["brief.md", "NEXT.md"], push=push)
+
+def mirrored_name(rel):
+    """Is this relative path one the mirror should handle (not a log, not a skipped folder, not a sync artefact, not the state file)?"""
+    parts = rel.split("/")
+    if parts[0] in SKIP_DIRS or rel == STATE or rel.endswith("result.json") or any(a in rel for a in ARTEFACT) or rel.endswith(".jsonl"):
+        return False
+    return not any(p.startswith(".") and p not in (".gitignore",) for p in parts)
+
+def local_files(folder):
+    out = []
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
+        for fn in files:
+            p = os.path.join(root, fn); rel = os.path.relpath(p, folder).replace(os.sep, "/")
+            if mirrored_name(rel) and os.path.getsize(p) <= MAXSIZE:
+                out.append(rel)
+    return sorted(out)
+
+def remote_files(remote):
+    if ":" in remote and not remote.startswith("/"):
+        host, path = remote.split(":", 1)
+        cmd = f"cd {shlex.quote(path)} 2>/dev/null && find . -type f -size -{MAXSIZE // 1000}k -printf '%P\\n'"
+        try:
+            names = _run(["ssh", "-o", "BatchMode=yes", host, cmd]).splitlines()
+        except RuntimeError:
+            names = []
+        return sorted(n for n in names if n and mirrored_name(n))
+    return local_files(remote) if os.path.isdir(remote) else []
 
 def log_path(marker):
     return "PRINT_LOG.jsonl" if marker.get("adapter") == "phonosphere" else os.path.join("records", "prints.jsonl")
@@ -105,8 +137,10 @@ def sync(local, remote, marker, dry=False, prefer=None):
             if lacking or added or not _lines(rf):
                 if os.path.exists(os.path.join(local, rel)):
                     _run(["rsync", "-a", "--mkpath", os.path.join(local, rel), f"{remote}/{rel}"]); out["pushed"].append(rel)
-        # TEXT files: three-way
-        for rel in pl["text"]:
+        # TEXT files (and, for an ordinary project, every file): three-way
+        mirror = marker.get("adapter") != "phonosphere"
+        text_files = sorted(set(pl["text"]) | (set(local_files(local)) | set(remote_files(remote)) if mirror else set()))
+        for rel in text_files:
             lp = os.path.join(local, rel); rf = os.path.join(tmp, "t_" + rel.replace(os.sep, "_"))
             has_remote = _fetch(f"{remote}/{rel}", rf)
             lh, rh, base = _hash(lp), (_hash(rf) if has_remote else None), state.get(rel)
@@ -130,11 +164,17 @@ def sync(local, remote, marker, dry=False, prefer=None):
                 out["conflicts"].append(f"{rel}: changed on both sides; the server's version is saved as {copy} and nothing was overwritten")
             elif action == "push":
                 if not dry:
+                    if rh is not None and prefer == "local":              # the server's different version is about to be replaced: keep it
+                        with open(rf, "rb") as a, open(os.path.join(local, f"{rel}.replaced-server-version-{datetime.datetime.now().strftime('%Y%m%d-%H%M')}"), "wb") as b:
+                            b.write(a.read())
                     _run(["rsync", "-a", "--mkpath", lp, f"{remote}/{rel}"]); state[rel] = lh
                 out["text_pushed"].append(rel)
             else:
                 if not dry:
                     os.makedirs(os.path.dirname(lp) or ".", exist_ok=True)
+                    if lh is not None and prefer == "server":              # your different version is about to be replaced: keep it
+                        with open(lp, "rb") as a, open(f"{lp}.replaced-local-version-{datetime.datetime.now().strftime('%Y%m%d-%H%M')}", "wb") as b:
+                            b.write(a.read())
                     with open(rf, "rb") as a, open(lp, "wb") as b:
                         b.write(a.read())
                     state[rel] = rh
@@ -144,14 +184,14 @@ def sync(local, remote, marker, dry=False, prefer=None):
             out["photos_pulled"] = sum(1 for l in n.splitlines() if l.startswith(">f"))
         except RuntimeError:
             pass
-    for rel in pl["push"]:
+    for rel in ([r for r in pl["push"] if not mirror or r.startswith("plates/")]):
         if os.path.exists(os.path.join(local, rel)):
             out["pushed"].append(rel)
             if not dry:
                 _run(["rsync", "-a", "--mkpath", os.path.join(local, rel), f"{remote}/{rel}"])
     if os.path.isdir(os.path.join(local, "photos")) and not dry:
         _rsync(f"{local}/photos/", f"{remote}/photos/", "--mkpath", "--ignore-existing")
-    if state and not dry and pl["text"]:
+    if state and not dry and (pl["text"] or mirror):
         with open(sp, "w") as f:
             json.dump(state, f)
     return out
@@ -177,5 +217,14 @@ def pull_new(remote_root, local_root, known_ids):
                 continue                                                  # not a project (no marker): leave it alone
         os.makedirs(local_root, exist_ok=True)
         _rsync(f"{remote_root.rstrip('/')}/{name}/", dest + "/", "--mkpath", "--exclude", ".fit2print-sync.json")
+        try:                                                              # both sides are identical right now: remember that, so the next sync can tell who changed what
+            import tomllib
+            with open(os.path.join(dest, "fit2print.toml"), "rb") as fh:
+                marker = tomllib.load(fh)
+            base = {rel: _hash(os.path.join(dest, rel)) for rel in set(plan(marker)["text"]) | (set(local_files(dest)) if marker.get("adapter") != "phonosphere" else set())}
+            with open(os.path.join(dest, STATE), "w") as fh:
+                json.dump(base, fh)
+        except Exception:
+            pass
         pulled.append(name)
     return pulled

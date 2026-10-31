@@ -14,6 +14,6 @@ def load(cad):
     for p in prints:
         if p.get("photo"):
             p["photo"] = os.path.join(cad, p["photo"])
-    return dict(name="Phonosphere", subtitle="a cathedral radio, printed on a Bambu A1", parts=parts, groups=["Cabinet", "Face", "Back", "Speaker pod", "Controls", "Electronics", "Trims"],
+    return dict(parts_label="parts in the radio", name="Phonosphere", subtitle="a cathedral radio, printed on a Bambu A1", parts=parts, groups=["Cabinet", "Face", "Back", "Speaker pod", "Controls", "Electronics", "Trims"],
                 runs=_jsonl(os.path.join(cad, "PLATE_RESULTS.jsonl")), prints=prints, open_items=list(reg.OPEN),
                 photos=sorted(glob.glob(os.path.join(cad, "photos", "*.jpg")) + glob.glob(os.path.join(cad, "photos", "*.png"))))

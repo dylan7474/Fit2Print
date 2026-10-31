@@ -21,7 +21,7 @@ GATE = {   # the button that leaves each stage, and what it means
 
 WORK = {   # what the assistant does in each stage (given to it as part of its instructions)
     "scope": "SCOPE: only collect information. Ask a little at a time, write brief.md and NEXT.md. Do NOT design or draw anything yet. When you believe the brief is complete, say so plainly and tell the person to press the button 'The brief is complete: start the design'; do not move on by yourself.",
-    "concept": "CONCEPT: the brief is approved. Make a first concept: write a simple parametric OpenSCAD model in model.scad (every dimension a named parameter taken from the brief; mark guesses UNVERIFIED), add [[render]] views to fit2print.toml (and model = \"model.scad\"), then run exactly `{f2p} render .` (alone, no pipes), look at the picture(s) it makes in renders/, then describe in plain words what they show and ask what to change. One picture at a time. Do not run the checks or slice yet.",
+    "concept": "CONCEPT: the brief is approved. Make a first concept: write a simple parametric OpenSCAD model in model.scad (every dimension a named parameter taken from the brief; mark guesses UNVERIFIED). model.scad MUST start with `part = \"assembly\";` and draw everything when part is \"assembly\", draw it pulled apart when part is \"exploded\", and draw each printable piece alone when part is that piece's name. Draw pictures with the render command only, never by hand-writing SVG or image files, add [[render]] views to fit2print.toml (and model = \"model.scad\"), then run exactly `{f2p} render .` (alone, no pipes), look at the picture(s) it makes in renders/, then describe in plain words what they show and ask what to change. One picture at a time. Do not run the checks or slice yet.",
     "model": "MODEL: the concept is approved. Refine model.scad into the real model: real dimensions from the component library, openings, fixings, the parts split into printable pieces. Keep the render views up to date. Do not slice yet.",
     "checks": "CHECKS: run the virtual checks (fit, printability, assembly) with the Fit2Print commands, show every finding in plain words, fix the model and run them again. Never say a check passed unless a command in this session said so.",
     "plate": "PLATE: slice each part with the Fit2Print plate command, report the verdicts, show what a CHECK or BLOCK means, and wait for the person to say the plates look right.",
@@ -53,7 +53,7 @@ def history(folder):
 def current(folder):
     h = history(folder)
     if h:
-        return h[-1]["to"]
+        return max(enumerate(h), key=lambda t: (t[1].get("at", ""), t[0]))[1]["to"]          # the newest by time (logs merged from two machines can interleave)
     for rel in (os.path.join("records", "prints.jsonl"), "PRINT_LOG.jsonl"):       # an established project that predates stages
         q = os.path.join(folder, rel)
         if os.path.exists(q) and os.path.getsize(q) > 0:

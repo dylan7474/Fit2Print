@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, ipaddress, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
+from . import archive as archive_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -132,17 +132,32 @@ def stage_card(pid, folder, a_ok):
 b.addEventListener('click',async()=>{{b.disabled=true;const r=await fetch('/p/'+pid+'/stage',{{method:'POST',headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:'to='+b.dataset.to}});
 if(!r.ok){{alert(await r.text());b.disabled=false;return}}const d=await r.json();sessionStorage.setItem('f2p-start-'+pid,d.start||'');location.reload()}})}}}})();</script>"""
 
+def housekeeping_card(pid, folder, marker):
+    if marker.get("adapter") == "phonosphere":
+        return ""                                                    # the radio is not archived from here
+    if archive_mod.is_archived(folder):
+        return (f"<div class=needs><b>This project is archived</b> (hidden from Home; nothing is deleted). "
+                f"<form method=post action='/p/{esc(pid)}/archive' style='display:inline'><input type=hidden name=action value=restore><button class='btn ghost' type=submit>Restore it</button></form></div>")
+    return (f"<details class=card><summary class=small>Housekeeping</summary><div class=meta style='margin:8px 0'>Archiving hides the project from Home. Nothing is deleted and it can be restored.</div>"
+            f"<form method=post action='/p/{esc(pid)}/archive'><input type=hidden name=action value=archive><button class='btn ghost' type=submit>Archive this project</button></form></details>")
+
+def housekeeping_banner(pid, folder, marker):
+    return housekeeping_card(pid, folder, marker) if archive_mod.is_archived(folder) else ""
+
 RENDER_JOBS = {}
 
 def render_card(pid, folder, marker):
     """'What it should look like': the project's rendered views, and a button to draw them again. Shown for a project that has a model or pictures."""
     pics = render_mod.list_renders(folder, marker)
-    if not pics and not marker.get("model"):
+    sketches = sorted(f for f in (os.listdir(os.path.join(folder, "concept")) if os.path.isdir(os.path.join(folder, "concept")) else []) if re.fullmatch(r"[A-Za-z0-9_.-]{1,80}\.(png|jpg|jpeg|svg)", f))
+    if not pics and not sketches and not marker.get("model"):
         return ""
     ts = int(max((os.path.getmtime(os.path.join(folder, "renders", f)) for _, f in pics), default=0))
     cells = "".join(f"<figure style='margin:0'><a href='/p/{esc(pid)}/renders/{esc(f)}?n={ts}'><img alt='{esc(t)}' src='/p/{esc(pid)}/renders/{esc(f)}?n={ts}' style='width:100%;border-radius:10px;border:1px solid var(--line)'></a>"
                     f"<figcaption class=small>{esc(t)}</figcaption></figure>" for t, f in pics)
-    empty = "" if pics else "<div class=small>No pictures drawn yet.</div>"
+    cells += "".join(f"<figure style='margin:0'><a href='/p/{esc(pid)}/concept/{esc(f)}'><img alt='{esc(f)}' src='/p/{esc(pid)}/concept/{esc(f)}' style='width:100%;border-radius:10px;border:1px solid var(--line);background:#fff'></a>"
+                     f"<figcaption class=small>sketch: {esc(f)}</figcaption></figure>" for f in sketches)
+    empty = "" if (pics or sketches) else "<div class=small>No pictures drawn yet.</div>"
     btn = (f"<button class='btn ghost' id=rbtn type=button>Draw again</button><span id=rstat class=small style='margin-left:10px'></span>" if marker.get("model") else "")
     return f"""<div class=card><div class=row><h3>What it should look like</h3><div>{btn}</div></div>{empty}
 <div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:10px'>{cells}</div></div>
@@ -321,8 +336,12 @@ def printer_card(app, pr):
             f"<div class=small style='margin-top:8px'>updated {age if age is not None else '?'} s ago &middot; <a href='/'>refresh</a></div></div>")
 
 def home(app, flash="", pr=None):
-    cards = []
+    cards, archived = [], []
     for pid, (folder, m) in app.projects().items():
+        if archive_mod.is_archived(folder):
+            archived.append(f"<div class=row style='padding:8px 0;border-top:1px solid var(--line)'><a href='/p/{esc(pid)}'>{esc(m.get('name', pid))}</a>"
+                            f"<form method=post action='/p/{esc(pid)}/archive'><input type=hidden name=action value=restore><button class='btn ghost' type=submit>Restore</button></form></div>")
+            continue
         try:
             _, _, data = app.load(pid)
             s = summarise(data)
@@ -334,11 +353,12 @@ def home(app, flash="", pr=None):
         cards.append(f"<div class=card><div class=row><div><h3>{esc(m.get('name', pid))}{kind}</h3><div class=meta>Stage: {esc(stage_mod.LABEL[stage_mod.current(folder)])} &middot; {s['total']} parts &middot; {s['printed']} printed</div></div>"
                      f"<span class='chip {s['chip'][1]}'>{s['chip'][0]}</span></div><div class=bar><i style='width:{pct}%'></i></div>{needs}"
                      f"<div class=actions><a class=btn href='/p/{esc(pid)}'>Open project</a><a class='btn ghost' href='/p/{esc(pid)}/log'>Log a print</a></div></div>")
+    arch = (f"<details class=card><summary>Archived projects ({len(archived)})</summary>{''.join(archived)}</details>" if archived else "")
     pc = printer_card(app, pr)
     body = (f"{('<div class=flash>' + esc(flash) + '</div>') if flash else ''}<div class=row><div><h1>Your projects</h1><p class=sub>From an idea to a print, checked before anything is wasted.</p></div>"
             f"<a class=btn href='/new'>+ New project</a></div>"
-            + (f"<div style='display:grid;grid-template-columns:2fr 1fr;gap:18px' class=twocol><div>{''.join(cards) or '<div class=card>No projects yet. Start one.</div>'}</div><div>{pc}</div></div>"
-               "<style>@media(max-width:850px){.twocol{grid-template-columns:1fr!important}}</style>" if pc else ("".join(cards) or "<div class=card>No projects yet. Start one.</div>")))
+            + (f"<div style='display:grid;grid-template-columns:2fr 1fr;gap:18px' class=twocol><div>{''.join(cards) or '<div class=card>No projects yet. Start one.</div>'}{arch}</div><div>{pc}</div></div>"
+               "<style>@media(max-width:850px){.twocol{grid-template-columns:1fr!important}}</style>" if pc else ("".join(cards) or "<div class=card>No projects yet. Start one.</div>") + arch))
     return page("Fit2Print", body)
 
 def new_form(err=""):
@@ -528,6 +548,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 k = int(jp.group(4))
                 if k >= len(pl.zs): return self._send(404, json.dumps(dict(error="no such layer")), "application/json")
                 return self._send(200, json.dumps(pl.layer(k)), "application/json", (("Cache-Control", "max-age=300"),))
+            jc = re.fullmatch(r"/p/([a-z0-9-]+)/concept/([A-Za-z0-9_.-]{1,80}\.(?:png|jpg|jpeg|svg))", path)
+            if jc and jc.group(1) in self.app.projects():
+                fp = os.path.join(self.app.projects()[jc.group(1)][0], "concept", jc.group(2))
+                if not os.path.isfile(fp): return self._send(404, "no such picture", "text/plain")
+                ct = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "svg": "image/svg+xml"}[jc.group(2).rsplit(".", 1)[1]]
+                with open(fp, "rb") as fh: return self._send(200, fh.read(), ct, (("Cache-Control", "no-cache"), ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")))
             jr = re.fullmatch(r"/p/([a-z0-9-]+)/renders/([a-z0-9_-]{1,40}\.png)", path)
             if jr and jr.group(1) in self.app.projects():
                 fp = os.path.join(self.app.projects()[jr.group(1)][0], "renders", jr.group(2))
@@ -550,7 +576,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><a class=btn href='/p/{pid}/log'>Log a print</a></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + render_card(pid, folder, mk) + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))
@@ -598,6 +624,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except RuntimeError as e:
                     return self._send(409, str(e), "text/plain")
                 return self._send(200, json.dumps(dict(started=True)), "application/json")
+            mar = re.fullmatch(r"/p/([a-z0-9-]+)/archive", u.path)
+            if mar and mar.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[mar.group(1)]
+                act = urllib.parse.parse_qs(body.decode()).get("action", [""])[0]
+                if mk.get("adapter") == "phonosphere" or act not in ("archive", "restore"): return self._send(400, "not allowed for this project", "text/plain")
+                archive_mod.record(folder, act)
+                return self._redirect("/" if act == "archive" else f"/p/{mar.group(1)}", hdr)
             mstage = re.fullmatch(r"/p/([a-z0-9-]+)/stage", u.path)
             if mstage and mstage.group(1) in self.app.projects():
                 folder, mk = self.app.projects()[mstage.group(1)]
