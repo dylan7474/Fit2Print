@@ -1,0 +1,39 @@
+title = "Assembly guide: Arch wall clock (cut into sections)"
+convention = "Left and right are as you look at the clock's FRONT."
+note = "A sample guide written to test Fit2Print's section splitter. The front and the back are each printed as four sections and joined with loose pins; the pins and the glue are the only things holding each half together."
+
+[[step]]
+title = "Dry-fit the four front sections on a flat table"
+text = "Lay the four front sections (front_s01 to front_s04) face down on a flat table and push them together along the two cut lines WITHOUT glue and without pins. The seams must close with no gap and no step. If a section rocks, it has a corner lifted by its brim: shave the brim off and try again."
+parts = ["front_full"]
+picture = "front-face"
+tip = "Do this before any glue. A section that does not close here would not close with glue either."
+
+[[step]]
+title = "Pin and glue the front"
+text = "Put a little glue on one cut face, push the loose pins (front_pins, 3.0 mm) into the holes of one section until they stop, then press the next section on. Do the vertical seam first, then the horizontal one. Keep the front face down on the table so the face stays flat while the glue sets."
+bought = ["Plastic cement or thin cyanoacrylate glue"]
+parts = ["front_full"]
+picture = "front-face"
+tip = "The pins are 15 mm long for two 8 mm holes, so they leave 1 mm of slack: they cannot bottom out and hold the seam open."
+
+[[step]]
+title = "Fit the LED module and its retainer"
+text = "Seat the 8 x 32 LED module in its rebate behind the window (LEDs towards the window), put the retainer on top and fix it with two M3 x 8 screws into the two small posts."
+bought = ["8 x 32 MAX7219 LED module", "2 M3 x 8 self-tapping screws"]
+parts = ["retainer"]
+picture = "pulled-apart"
+
+[[step]]
+title = "Pin and glue the back plate"
+text = "Join the four back sections (back_s01 to back_s04) the same way, with the pins and a little glue, lying flat. Fit the ESP32 in its pocket and hold it with a cable tie through the two slots; bring the USB lead out through the slot in the bottom."
+bought = ["ESP32-DevKitC V4", "a small cable tie"]
+parts = ["back_full"]
+picture = "back"
+
+[[step]]
+title = "Screw the back on and hang it"
+text = "Put the back plate on the front and fix it with six M3 x 16 self-tapping screws into the six bosses. Put two screws in the wall 120 mm apart, heads proud by about 3 mm, and hang the clock on the keyhole slots."
+bought = ["6 M3 x 16 self-tapping screws", "2 wall screws"]
+parts = ["back_full"]
+picture = "pulled-apart"

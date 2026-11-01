@@ -1,0 +1,48 @@
+# Project marker (see Fit2Print docs/PROJECTS.md): every Fit2Print command reads this first.
+id = "sample-arch-wall-clock"
+name = "Sample: Arch wall clock"
+kind = "design-and-print"
+adapter = "generic"
+printer_profile = "bambu_a1_pla"
+deliverables = "~/Downloads/sample-arch-wall-clock"
+# model = "model.scad"     # an STL older than this file is refused as stale
+model = "model.scad"             # an STL older than this is refused as stale
+components = ["max7219-8x32-matrix", "esp32-devkitc-v4"]
+
+[[export]]
+name = "front_full"
+part = "front_full"              # the whole front: 330 x 355 mm, TOO BIG for the bed: `fit2print split` cuts it
+
+[[export]]
+name = "back_full"
+part = "back"
+
+[[export]]
+name = "retainer"
+part = "retainer"
+
+[[split]]
+name = "front"
+part = "front_full"               # stl/front_full.stl is cut into sections/front_s01.stl ... that each fit the A1 bed, with pins
+
+[[split]]
+name = "back"
+part = "back_full"
+
+[[render]]
+name = "pulled-apart"
+title = "Pulled apart: front, retainer, back"
+part = "exploded"
+angle = [62, 0, 28]
+
+[[render]]
+name = "front-face"
+title = "The front face (seen from the bed side), with its three engraved rings and the LED window"
+part = "front_full"
+angle = [180, 0, 180]
+
+[[render]]
+name = "back"
+title = "The back plate, with its keyholes and the USB slot"
+part = "back"
+view = "top"

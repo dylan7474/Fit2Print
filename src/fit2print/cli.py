@@ -1,5 +1,5 @@
 """fit2print command line."""
-import argparse, sys
+import argparse, os, sys
 from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync, hardware, render as render_mod, export as export_mod, modelview
 from .settings import Settings
 
@@ -254,6 +254,63 @@ def cmd_coupon(args):
             print(f"FAIL  {r['name']}: {r['error']}"); bad = 1
     return bad
 
+def cmd_split(args):
+    from . import split as split_mod
+    if os.path.isdir(args.stl):                                  # project mode: every [[split]] table in the marker
+        marker = read_marker(args.stl)
+        tables = marker.get("split") or []
+        if not tables:
+            print("this project has no [[split]] table: add one (name, part, and optionally scale, max_pieces, bed, margin, pin) to fit2print.toml, or give an STL file"); return 1
+        bad = 0
+        for tb in tables:
+            if not split_mod.NAME.fullmatch(str(tb.get("name", ""))) or not tb.get("part"):
+                print(f"a [[split]] needs a name (lower-case letters, digits, - or _) and the part's STL name: {tb}"); bad = 1; continue
+            stl = os.path.join(args.stl, "stl", tb["part"] + ".stl")
+            if not os.path.exists(stl):
+                print(f"FAIL  {tb['name']}: {stl} is missing: run `fit2print export .` first"); bad = 1; continue
+            model = marker.get("model")
+            if model and os.path.getmtime(stl) < os.path.getmtime(os.path.join(args.stl, model)):
+                print(f"FAIL  {tb['name']}: {os.path.basename(stl)} is older than {model}: run `fit2print export .` again (a stale part is never cut)"); bad = 1; continue
+            res = split_mod.split(stl, os.path.join(args.stl, tb.get("out", "sections")), base=tb["name"], bed=tuple(tb.get("bed", split_mod.A1_BED)), margin=float(tb.get("margin", 6.0)),
+                                  scale=float(tb.get("scale", 1.0)), max_pieces=int(tb.get("max_pieces", 64)), pin_d=float(tb.get("pin", 3.0)), pins=bool(tb.get("pins", True)))
+            print(f"{'ok  ' if res['ok'] else 'FAIL'}  {tb['name']}: {res['summary']}")
+            for w in res["warnings"]:
+                print("      NOTE  " + w)
+            try:
+                split_mod.map_picture(stl, res, os.path.join(args.stl, tb.get("out", "sections"), tb["name"] + "_map.png"), scale=float(tb.get("scale", 1.0)))
+            except Exception:
+                pass
+            bad |= not res["ok"]
+        return int(bad)
+    if not os.path.isdir(args.stl) and not args.out:
+        print("give --out FOLDER for where the sections go"); return 1
+    cuts = {}
+    for item in args.cut or []:
+        try:
+            ax, pos = item.split("=")
+            assert ax in "xyz" and len(ax) == 1
+            cuts.setdefault(ax, []).append(float(pos))
+        except Exception:
+            print(f"cannot read --cut {item!r}: write it like x=173.5 (an axis x, y or z, then a position in mm)"); return 1
+    try:
+        res = split_mod.split(args.stl, args.out, base=args.base, bed=tuple(args.bed) if args.bed else split_mod.A1_BED, margin=args.margin, scale=args.scale,
+                              max_pieces=args.max_pieces, cuts=cuts or None, pin_d=args.pin, pins=not args.no_pins)
+    except (ValueError, OSError) as e:
+        print(f"cannot split: {e}"); return 1
+    print(res["summary"])
+    for p in res["pieces"]:
+        print(("ok    " if p.get("ok") else "FAIL  ") + f"{p['name']}: " + (f"{p['size'][0]} x {p['size'][1]} x {p['size'][2]} mm, on its {p['down']} face, {p['holes']} pin holes" if p.get("ok") else p.get("error", "")))
+    if res["pins"]["file"]:
+        print("pins  " + res["pins"]["note"])
+    for w in res["warnings"]:
+        print("NOTE  " + w)
+    try:
+        pic = split_mod.map_picture(args.stl, res, os.path.join(args.out, (args.base or "cut") + "_map.png"), scale=args.scale)
+        print("map   " + pic)
+    except Exception as e:
+        print(f"(no picture: {type(e).__name__})")
+    return 0 if res["ok"] else 1
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -295,6 +352,11 @@ def main(argv=None):
     cp = s.add_parser("coupon", help="cut small test pieces (coupons) out of a part's real STL, to try one doubtful spot before a long print")
     cp.add_argument("stl"); cp.add_argument("--out", required=True); cp.add_argument("--zmax", type=float, help="drop everything above this height (mm)")
     cp.add_argument("--box", nargs=5, action="append", metavar=("NAME", "X0", "X1", "Y0", "Y1")); cp.set_defaults(fn=cmd_coupon)
+    sp = s.add_parser("split", help="cut a part of any size into sections that fit the bed, with pin joints, each lying on its largest flat cut face")
+    sp.add_argument("stl", help="an STL file, or a project folder (then every [[split]] table in its fit2print.toml is cut)"); sp.add_argument("--out"); sp.add_argument("--base"); sp.add_argument("--bed", nargs=3, type=float, metavar=("X", "Y", "Z"), help="the bed in mm (default: Bambu A1 256 x 256 x 256)")
+    sp.add_argument("--margin", type=float, default=6.0, help="room kept free round the edge of the bed (default 6 mm)"); sp.add_argument("--scale", type=float, default=1.0, help="shrink or grow the whole part first (a test print at 0.4, say)")
+    sp.add_argument("--max-pieces", type=int, default=64); sp.add_argument("--cut", action="append", metavar="AXIS=POS", help="cut exactly here (x=173.5), repeatable, instead of planning")
+    sp.add_argument("--pin", type=float, default=3.0, help="pin diameter in mm (default 3.0)"); sp.add_argument("--no-pins", action="store_true"); sp.set_defaults(fn=cmd_split)
     ex = s.add_parser("export", help="write each [[export]] piece of the model as stl/NAME.stl, flat on the bed, ready for the checks and the slicer")
     ex.add_argument("project"); ex.set_defaults(fn=cmd_export)
     a = p.parse_args(argv)
