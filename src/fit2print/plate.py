@@ -64,7 +64,7 @@ def make(stl, outdir, cfg=None, filament="pla_black", source=None, project=None,
     if supports == "auto" and stl.endswith((".stl", ".STL")):
         import trimesh
         mesh = trimesh.load(stl)
-        regions = support.shelves(mesh)
+        regions = support.shelves(mesh, span=cfg.shelf_ok)
         if regions:
             tmp = os.path.join(tempfile.mkdtemp(), "painted.3mf")
             painted = support.paint(dest, mesh, regions, tmp)
@@ -90,7 +90,7 @@ def make_together(stls, outdir, cfg=None, filament="pla_black", name=None, sourc
     dest, plate = slice_stl(stls, outdir, filament, profiles, name)
     import trimesh
     meshes = {os.path.basename(f): trimesh.load(f) for f in stls}
-    regions = {n: (support.shelves(m) if supports == "auto" else []) for n, m in meshes.items()}
+    regions = {n: (support.shelves(m, span=cfg.shelf_ok) if supports == "auto" else []) for n, m in meshes.items()}
     painted = {}
     if any(regions.values()):
         tmp = os.path.join(tempfile.mkdtemp(), "painted.3mf")
@@ -148,7 +148,7 @@ def _judge(dest, plate, name, cfg, stl, project, regions=(), painted=0, asbuilt_
         v = "CHECK" if v == "PASS" else v
     if asbuilt_check and isinstance(stl, str) and stl.endswith((".stl", ".STL")):
         import trimesh
-        av, alines = asbuilt.check(layers, trimesh.load(stl))
+        av, alines = asbuilt.check(layers, trimesh.load(stl), span=cfg.shelf_ok)
         for t in alines:
             notes.append(("BLOCK: " if av == "BLOCK" else "CHECK: ") + t)
         v = "BLOCK" if av == "BLOCK" or v == "BLOCK" else ("CHECK" if av == "CHECK" and v == "PASS" else v)
@@ -160,7 +160,7 @@ def _judge(dest, plate, name, cfg, stl, project, regions=(), painted=0, asbuilt_
             if box is None:
                 notes.append(f"CHECK: {os.path.basename(f)} was not found on the plate, so it was not compared with its design"); v = "CHECK" if v == "PASS" else v
                 continue
-            av, alines = asbuilt.check(layers, trimesh.load(f), box)
+            av, alines = asbuilt.check(layers, trimesh.load(f), box, span=cfg.shelf_ok)
             for t in alines:
                 notes.append(("BLOCK: " if av == "BLOCK" else "CHECK: ") + os.path.basename(f) + ": " + t)
             v = "BLOCK" if av == "BLOCK" or v == "BLOCK" else ("CHECK" if av == "CHECK" and v == "PASS" else v)

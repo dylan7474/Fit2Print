@@ -65,4 +65,4 @@ A local web app opened in the browser, working on a phone (photos are uploaded w
 * The **project file** format: how much of the model's parts, build order and screws can be *derived* from an OpenSCAD model, and how much must be declared?
 * **Other CAD front ends** (Fusion, FreeCAD, Blender): worth supporting, or OpenSCAD/mesh only at first?
 * **Privacy**: models and photos stay local by default; which assistant calls send what, and a log of it.
-* **Calibration**: a guided calibration (the card print) per printer/material, producing the profile file.
+* **Calibration**: `fit2print calibrate card` / `calibrate record`: one printed card per printer/material, producing the profile file (done 2026-11-01).

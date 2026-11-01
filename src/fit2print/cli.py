@@ -1,5 +1,5 @@
 """fit2print command line."""
-import argparse, os, sys
+import argparse, os, re, sys
 from . import __version__, deps, layers, gcode, toolpath, dashboard, plate, project, sync, hardware, render as render_mod, export as export_mod, modelview
 from .settings import Settings
 
@@ -312,6 +312,31 @@ def cmd_selftest(args):
         records.append(args.manifest, "selftest", r["ok"], passed=r["passed"], failed=r["failed"], skipped=r["skipped"])
     return 0 if r["ok"] else 1
 
+def cmd_calibrate(args):
+    from . import calibrate
+    try:
+        if args.action == "card":
+            stl, sheet = calibrate.card(args.out)
+            print(f"wrote {stl} and {sheet}\nPrint the card once for each filament and slicer profile (about 35 minutes at 0.28 mm), measure it, then run:\n  fit2print calibrate record --name \"YOUR FILAMENT AND PROFILE\" --holes ... (see {sheet})")
+            return 0
+        if not args.name:
+            print("calibrate record needs --name (for example \"Creality black PLA 0.28\")"); return 1
+        rec = calibrate.record(args.name, args.base, args.holes or "", args.outer or "", args.pin, args.bridge_ok, args.shelf_ok, args.wall_ok, args.lean_ok, args.flow)
+        slug = re.sub(r"[^a-z0-9]+", "_", args.name.lower()).strip("_")[:40] or "calibrated"
+        path = os.path.expanduser(args.profile_out or os.path.join("~", ".config", "fit2print", "profiles", slug + ".toml"))
+        calibrate.write_profile(rec, path, args.base)
+        print(f"hole_comp {rec['hole_comp']:+g} mm, outer_comp {rec['outer_comp']:+g} mm")
+        for n in rec["notes"]:
+            print("  note: " + n)
+        for a in rec["applied"]:
+            print("  used by the checks: " + a)
+        print(f"profile written: {path}\n  use it with: fit2print plate STL --profile {path}")
+        if args.project:
+            print(f"  offsets for the model: {calibrate.write_offsets(rec, args.project)}   log: {calibrate.log(rec, args.project)}")
+    except ValueError as e:
+        print(f"cannot calibrate: {e}"); return 1
+    return 0
+
 def cmd_report(args):
     from . import report
     cfg = Settings.load(args.profile)
@@ -445,6 +470,13 @@ def main(argv=None):
     st = s.add_parser("selftest", help="run the checks on plates whose outcome is known (selftest.toml) and fail if they disagree: is the checker still telling the truth?")
     st.add_argument("manifest", nargs="?", default=None, help="a project folder or a selftest.toml (default: only the built-in synthetic cases)"); st.add_argument("--strict", action="store_true", help="a missing or skipped fixture is a failure"); st.add_argument("--all", action="store_true", help="also run the fixtures marked slow (minutes each)")
     st.set_defaults(fn=cmd_selftest)
+    cb = s.add_parser("calibrate", help="print one card, measure it, and get a profile for this printer and filament (hole and outside allowances, shelf and bridge limits, flow)")
+    cb.add_argument("action", choices=["card", "record"]); cb.add_argument("--out", default="calibration", help="card: the folder for calibration_card.stl and MEASURE.md")
+    cb.add_argument("--name"); cb.add_argument("--base", default=None, help="the profile to start from (default: the bundled A1 one)"); cb.add_argument("--profile-out", default=None, help="where to write the profile (default ~/.config/fit2print/profiles/NAME.toml)")
+    cb.add_argument("--project", default=None, help="also write printer_offsets.scad and a CALIBRATION.md line into this project")
+    cb.add_argument("--holes"); cb.add_argument("--outer"); cb.add_argument("--pin", choices=["ok", "tight", "loose"])
+    cb.add_argument("--bridge-ok", type=float); cb.add_argument("--shelf-ok", type=float); cb.add_argument("--wall-ok", type=float); cb.add_argument("--lean-ok", type=float); cb.add_argument("--flow", type=float)
+    cb.set_defaults(fn=cmd_calibrate)
     rp = s.add_parser("report", help="one page, plain English, with a picture of the real layer at every spot the checks flagged")
     rp.add_argument("plate", help="a sliced .3mf"); rp.add_argument("stl", nargs="*", help="the design STLs of the parts on the plate (adds the as-built comparison)")
     rp.add_argument("--out", default=None, help="default: PLATE_report.html beside the plate"); rp.add_argument("--profile", default=None); rp.set_defaults(fn=cmd_report)

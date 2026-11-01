@@ -67,9 +67,10 @@ def overhangs(mesh, res=0.8):
     return found
 
 
-def shelves(mesh, res=0.8):
-    """The overhang regions that get supports."""
-    return [f for f in overhangs(mesh, res) if f[6] > PAINT_SPAN and f[1] >= MIN_VOID]
+def shelves(mesh, res=0.8, span=None):
+    """The overhang regions that get supports: reaching further than `span` mm (default PAINT_SPAN; a calibrated profile's shelf_ok)."""
+    span = PAINT_SPAN if span is None else span
+    return [f for f in overhangs(mesh, res) if f[6] > span and f[1] >= MIN_VOID]
 
 
 def plate_objects(root):

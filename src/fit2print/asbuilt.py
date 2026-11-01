@@ -65,7 +65,7 @@ def draw_both(segs, origin, shape, want_a, want_b):
     return [np.array(i, dtype=bool) for i in ims]
 
 
-def check_part(layers, plate_box, mesh, allow=None, every=1):
+def check_part(layers, plate_box, mesh, allow=None, every=1, span=None):
     b = mesh.bounds
     # align: the outer walls of this part (those inside its plate box) against the mesh's own extent
     pad = 3.0
@@ -78,7 +78,7 @@ def check_part(layers, plate_box, mesh, allow=None, every=1):
     if len(walls) == 0:
         return {"error": "no outer walls found for this part"}
     dx, dy = walls[:, 0].min() - b[0][0], walls[:, 1].min() - b[0][1]
-    allow = list(allow) if allow is not None else support.shelves(mesh)      # regions where supports are painted on purpose
+    allow = list(allow) if allow is not None else support.shelves(mesh, span=span)      # regions where supports are painted on purpose
     sl = _Grid(mesh, RES)
     shape = (sl.ny, sl.nx)
     origin = (sl.x0 + dx, sl.y0 + dy)               # plate coordinates of the grid's corner
@@ -200,7 +200,7 @@ def estimate_angles(layers, mesh, flip):
         return ()
 
 
-def best_fit(layers, box, mesh, allow=None, every=None):
+def best_fit(layers, box, mesh, allow=None, every=None, span=None):
     """The slicer may rotate a part on the plate (--arrange): compare the plate box with the mesh footprint and, when turned, try +90 and -90."""
     import trimesh
     b = mesh.bounds
@@ -212,7 +212,7 @@ def best_fit(layers, box, mesh, allow=None, every=None):
             m2 = mesh.copy()
             m2.apply_transform(trimesh.transformations.rotation_matrix(math.radians(ang), [0, 0, 1]))
             m2.apply_translation([-m2.bounds[0][0], -m2.bounds[0][1], 0])
-            r = check_part(layers, box, m2, allow)
+            r = check_part(layers, box, m2, allow, span=span)
             score = sum(x[0] for x in r.get("missing", [])) + sum(x[0] for x in r.get("extra", []))
             if best is None or score < best[0]:
                 best = (score, r)
@@ -238,7 +238,7 @@ def best_fit(layers, box, mesh, allow=None, every=None):
         if ang:
             m2.apply_transform(trimesh.transformations.rotation_matrix(math.radians(ang), [0, 0, 1]))
         m2.apply_translation([-m2.bounds[0][0], -m2.bounds[0][1], -m2.bounds[0][2]])
-        r = check_part(layers, box, m2, allow, every=every)
+        r = check_part(layers, box, m2, allow, every=every, span=span)
         if "error" in r:
             continue
         score = sum(x[0] for x in r["missing"]) + sum(x[0] for x in r["extra"]) + 50 * len(r["filled"])
@@ -247,18 +247,18 @@ def best_fit(layers, box, mesh, allow=None, every=None):
         if score < 20:                          # a wrong pose scores hundreds of mm2 even on a sample of the layers
             break
     if best is None:
-        return check_part(layers, box, mesh, allow)
+        return check_part(layers, box, mesh, allow, span=span)
     if every == 1:
         return best[1]
-    full = check_part(layers, box, best[2], allow)
+    full = check_part(layers, box, best[2], allow, span=span)
     if sum(x[0] for x in full["missing"]) + sum(x[0] for x in full["extra"]) + 50 * len(full["filled"]) < 20 or not sampled:
         return full
-    return best_fit(layers, box, mesh, allow, every=1)       # the sample missed a layer that disagrees: search again with every layer
+    return best_fit(layers, box, mesh, allow, every=1, span=span)       # the sample missed a layer that disagrees: search again with every layer
 
 
-def check(layers, mesh, plate_box=None, allow=None):
+def check(layers, mesh, plate_box=None, allow=None, span=None):
     """The one call plate.py uses: -> (verdict PASS|CHECK|BLOCK, [human lines]). `allow` = the painted shelf regions (deliberate support)."""
-    res = best_fit(layers, plate_box, mesh, allow)
+    res = best_fit(layers, plate_box, mesh, allow, span=span)
     if "error" in res:
         return "CHECK", [f"as-built check could not run ({res['error']})"]
     feats = [f for f in summarise(res) if f[1] >= 3]

@@ -26,6 +26,14 @@ class Settings:
     bridge_check: float = 15.0
     bridge_block: float = 30.0
     snap_strain_limit: float = 0.02
+    # from the calibration card (fit2print calibrate): None = not measured yet
+    shelf_ok: float = 5.0                  # mm: a ledge reaching further than this inside its layer gets painted supports (the card's longest clean shelf)
+    hole_comp: float = 0.0                 # mm added to a hole's drawn diameter (a hole that prints 0.2 small has +0.2)
+    outer_comp: float = 0.0                # mm added to an outside dimension (a block that prints 0.1 big has -0.1)
+    bridge_ok: float = None
+    wall_ok: float = None
+    lean_ok: float = None
+    pin: str = None
 
     @property
     def filament_area(self):
@@ -44,4 +52,5 @@ class Settings:
                    air_support_distance=a.get("support_distance", 0.9), air_check=a.get("check", 8.0), air_block=a.get("block", 25.0),
                    resolution=k.get("resolution", 0.25), reach=k.get("reach", 0.6), look=k.get("look", 15.0),
                    cantilever_check=k.get("cantilever_check", 3.5), cantilever_block=k.get("cantilever_block", 6.0),
-                   bridge_check=k.get("bridge_check", 15.0), bridge_block=k.get("bridge_block", 30.0), snap_strain_limit=d.get("snap", {}).get("strain_limit", 0.02))
+                   bridge_check=k.get("bridge_check", 15.0), bridge_block=k.get("bridge_block", 30.0), snap_strain_limit=d.get("snap", {}).get("strain_limit", 0.02),
+                   **{key: c[key] for key in ("shelf_ok", "hole_comp", "outer_comp", "bridge_ok", "wall_ok", "lean_ok", "pin") if key in (c := d.get("calibration", {}))})
