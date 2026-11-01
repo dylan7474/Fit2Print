@@ -29,5 +29,7 @@
 | A relative output folder: OpenSCAD runs elsewhere, found no part, and every section looked "empty" (100% of the volume lost) | a silent wrong answer | all paths absolute; a real OpenSCAD complaint is a failure, only a plain "empty" is a gap; the volume check (sections + pin holes = the part) caught it |
 | A screw hole's counterbore cut through the back plate's lip ring: the exported STL was not watertight | a model flaw found only by a warning | check that a screw's hole passes only through the part it belongs to (to do) |
 | A model drawn in print orientation (face on the bed) gives upside-down pictures with `view = "bottom"` | a confusing render | say so in the render help; use `angle = [180, 0, 180]` for the bed side |
-| `plate` slices one STL at a time, so eight sections meant eight commands | friction | `plate --split NAME` for all sections (to do) |
-
+| `plate` slices one STL at a time, so eight sections meant eight commands | friction | `plate --split NAME_split.json` slices every section and the pin plate (done) |
+| Walls too thin for pins (a 2 mm box) were left "join with glue" | the splitter gave up exactly where large thin-walled prints (cases) need it | `joint=auto`: pins where two fit, otherwise a chessboard of 45 degree pyramid teeth on that seam (works in any wall, locks both ways) |
+| Square teeth left 2.5 mm overhangs when the seam stood vertical on the bed (the plate check said CHECK) | a joint that needs supports | teeth with 45 degree sides: both sections PASS with no notes |
+| A zero-thickness slab in an OpenSCAD hull vanished, so the pocket was never cut and two pieces overlapped | a joint that looked fine in the report | the volume check caught it (pieces totalled MORE than the part): the check now accepts a loss between 0 and a bound, and fails on a gain |

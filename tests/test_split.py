@@ -74,7 +74,7 @@ class Split(unittest.TestCase):
         self.assertFalse(r["ok"]); self.assertEqual(r["pieces"], []); self.assertIn("smaller scale", r["warnings"][0])
     def test_thin_walls_get_no_pins_and_a_warning(self):
         thin = make(self.d, "thin", "difference() { cube([400, 100, 20]); translate([1.5,1.5,-1]) cube([397, 97, 30]); }")       # a 1.5 mm wall box
-        r = split.split(thin, os.path.join(self.d, "thinout"), base="thin")
+        r = split.split(thin, os.path.join(self.d, "thinout"), base="thin", joint="pins")
         self.assertTrue(any("room for only" in w for w in r["warnings"]), r["warnings"]); self.assertEqual(r["pins"]["count"], 0)
         self.assertLess(r["volume_mismatch"], 0.002)
     def test_a_hole_that_breaks_out_of_a_wall_is_caught_by_the_volume_check(self):
@@ -199,3 +199,43 @@ def test_plate_split_one_block_fails_the_run(tmp_path, monkeypatch, capsys):
     assert cli._plate_split(_args(j, tmp_path), None) == 1
     assert len(seen) == 2
     assert "BLOCKED" in capsys.readouterr().out
+
+
+# ---- keys (interlocking teeth) for walls too thin for pins -----------------------
+def _thin_box(tmp_path, wall=2.0):
+    scad = tmp_path / "t.scad"; stl = tmp_path / "t.stl"
+    scad.write_text(f"difference(){{cube([300,60,40]);translate([{wall},{wall},{wall}])cube([{300 - 2 * wall},{60 - 2 * wall},40]);}}")
+    subprocess.run(["openscad", "-q", "-o", str(stl), str(scad)], check=True)
+    return str(stl)
+
+
+def test_thin_walls_get_teeth_and_volume_balances(tmp_path):
+    r = split.split(_thin_box(tmp_path), str(tmp_path / "o"), bed=(200, 200, 200))
+    assert r["ok"], r["warnings"]
+    assert r["cuts"][0]["joint"] == "keys" and r["cuts"][0]["pins"] == []
+    assert any("interlocking teeth" in w for w in r["warnings"])
+    assert r["volume_mismatch"] == 0 and 0 < r["volume_key_gap"] <= r["volume_key_gap_bound"]
+    assert r["pins"]["count"] == 0
+    sizes = sorted(p["size"][0] for p in r["pieces"])
+    assert sizes[0] == 150.0 and sizes[1] == 152.5        # one piece carries the 2.5 mm teeth
+
+
+def test_thick_walls_still_get_pins(tmp_path):
+    r = split.split(_thin_box(tmp_path, wall=9.0), str(tmp_path / "o"), bed=(200, 200, 200))
+    assert r["ok"] and r["cuts"][0]["joint"] == "pins" and r["pins"]["count"] >= 2
+
+
+def test_pins_only_mode_warns_instead_of_keying(tmp_path):
+    r = split.split(_thin_box(tmp_path), str(tmp_path / "o"), bed=(200, 200, 200), joint="pins")
+    assert r["cuts"][0]["joint"] == "pins" and any("use joint=auto" in w for w in r["warnings"])
+
+
+def test_forced_keys_on_a_thick_part_balance(tmp_path):
+    r = split.split(_thin_box(tmp_path, wall=9.0), str(tmp_path / "o"), bed=(200, 200, 200), joint="keys")
+    assert r["ok"] and r["cuts"][0]["joint"] == "keys" and r["volume_mismatch"] < 0.005
+
+
+def test_bad_joint_name_refused(tmp_path):
+    import pytest
+    with pytest.raises(ValueError):
+        split.split(_thin_box(tmp_path), str(tmp_path / "o"), bed=(200, 200, 200), joint="glue")

@@ -165,6 +165,17 @@ def pin_sites(mesh, axis, pos, hole_d, depth, wall=1.2, spacing=45.0, max_pins=1
         chosen.append(pts[np.argmax(d)])
     return [tuple(map(float, q)) for q in chosen], float(cand.sum()) * res * res, area
 
+def section_area(mesh, axis, pos, res=0.5):
+    """Solid area (mm2) of the part where the plane axis=pos cuts it."""
+    m, _ = _permuted(mesh, axis)
+    got = next(layers.masks(m, [float(np.clip(pos + 0.2, m.bounds[0][2] + 0.05, m.bounds[1][2] - 0.05))], res=res), None)
+    return 0.0 if got is None else float(got[1].sum()) * res * res
+
+def key_gap_bound(area, clearance):
+    """The most plastic the teeth's clearance can take out of a seam of solid area `area` (measured: about 0.6 x clearance per mm2 on thin
+    walls, where the sloped sides cut across the wall; 4 x clearance is a safe upper limit)."""
+    return area * clearance * 4
+
 def _hole_scad(axis, side, pos, ab, hole_d, depth):
     """OpenSCAD for one blind hole starting on the plane and going into the piece on `side` (+1 above the plane, -1 below)."""
     p = [0.0, 0.0, 0.0]
@@ -172,6 +183,37 @@ def _hole_scad(axis, side, pos, ab, hole_d, depth):
     rot = {(0, 1): "[0,90,0]", (0, -1): "[0,-90,0]", (1, 1): "[-90,0,0]", (1, -1): "[90,0,0]", (2, 1): "[0,0,0]", (2, -1): "[180,0,0]"}[(axis, side)]
     # start 0.01 before the plane so no film is left over the hole's mouth
     return f"translate([{p[0]:.4f},{p[1]:.4f},{p[2]:.4f}]) rotate({rot}) translate([0,0,-0.01]) cylinder(d={hole_d}, h={depth + 0.01}, $fn=32);"
+
+def _key_blocks(axis, pos, lo_c, hi_c, period, height, grow=0.0, below=0.0):
+    """OpenSCAD for the 'keys' joint on one cut plane: a chessboard of square teeth `period` mm wide, `height` mm tall, with 45 degree sides so
+    they print without supports whichever way the seam faces. Clipped to the piece's own footprint lo_c..hi_c. The chessboard is laid on absolute
+    coordinates, so both pieces agree where the teeth are. grow = clearance: the receiving piece's pocket is wider all round by `grow` and taller by `grow`."""
+    o1, o2 = (axis + 1) % 3, (axis + 2) % 3
+    top_half = period / 2 - height                      # half-width of a tooth's flat top (45 degrees: it shrinks as fast as it rises)
+    if top_half < 0.4:
+        raise ValueError("key_height too large for key_period: the teeth would have no flat top")
+    def box(z0, z1, half, ca, cb):
+        o = [0.0] * 3; d = [0.0] * 3
+        o[axis] = z0; d[axis] = z1 - z0
+        o[o1] = ca - half; d[o1] = 2 * half; o[o2] = cb - half; d[o2] = 2 * half
+        return "translate([%.4f,%.4f,%.4f]) cube([%.4f,%.4f,%.4f]);" % (o[0], o[1], o[2], d[0], d[1], d[2])
+    teeth = []
+    for ia in range(int(math.floor(lo_c[o1] / period)) - 1, int(math.ceil(hi_c[o1] / period)) + 1):
+        for ib in range(int(math.floor(lo_c[o2] / period)) - 1, int(math.ceil(hi_c[o2] / period)) + 1):
+            if (ia + ib) % 2:
+                continue
+            ca = (ia + 0.5) * period; cb = (ib + 0.5) * period
+            if ca + period / 2 + grow < lo_c[o1] or ca - period / 2 - grow > hi_c[o1] or cb + period / 2 + grow < lo_c[o2] or cb - period / 2 - grow > hi_c[o2]:
+                continue
+            base = box(pos - below, pos, period / 2 + grow, ca, cb)
+            top = box(pos + height + grow - 0.001, pos + height + grow, top_half, ca, cb)
+            teeth.append("hull() { %s %s }" % (base, top))
+    if not teeth:
+        return []
+    clip = [0.0] * 3; size = [0.0] * 3
+    clip[axis] = pos - 1000; size[axis] = 2000
+    clip[o1] = lo_c[o1]; size[o1] = hi_c[o1] - lo_c[o1]; clip[o2] = lo_c[o2]; size[o2] = hi_c[o2] - lo_c[o2]
+    return ["intersection() { union() { %s } translate([%.4f,%.4f,%.4f]) cube([%.4f,%.4f,%.4f]); }" % (" ".join(teeth), *clip, *size)]
 
 def _run_scad(scad_text, out, command=None, timeout=900):
     cmd = command or [shutil.which("openscad") or "openscad"]
@@ -230,7 +272,7 @@ def orient(mesh, room):
     return None, "no flat end lets it fit the bed in any turn"
 
 def split(stl, outdir, base=None, bed=A1_BED, margin=6.0, scale=1.0, max_pieces=64, cuts=None, pin_d=3.0, clearance=0.3, depth=8.0,
-          wall=1.2, pins=True, command=None, timeout=900):
+          wall=1.2, pins=True, joint="auto", key_period=8.0, key_height=2.5, key_clearance=0.15, command=None, timeout=900):
     """Cut the part at `stl` into sections that fit the bed and write them to `outdir`.
     cuts: optional {"x": [pos...], "y": [...], "z": [...]} to cut exactly there instead of planning. -> a result dict (also written as split.json)."""
     stl = os.path.abspath(stl); outdir = os.path.abspath(outdir); os.makedirs(outdir, exist_ok=True)       # OpenSCAD runs elsewhere: every path must be absolute
@@ -278,7 +320,13 @@ def split(stl, outdir, base=None, bed=A1_BED, margin=6.0, scale=1.0, max_pieces=
             res["cuts"].append(dict(axis=a, pos=round(p, 2), outline_mm=round(outline_length(mesh, i, p), 1), pins=[]))
     # 2. the pins on every cut plane
     sites = {}
-    if pins:
+    keyed = set()                                        # seams joined by interlocking teeth instead of pins
+    if joint not in ("auto", "pins", "keys"):
+        raise ValueError("joint must be auto, pins or keys")
+    if joint == "keys":
+        for c in res["cuts"]:
+            keyed.add((AXES.index(c["axis"]), c["pos"])); c["joint"] = "keys"
+    elif pins:
         for c in res["cuts"]:
             ax = AXES.index(c["axis"])
             avoid = []                                       # the other cut planes, as (which of the plane's two coordinates, position)
@@ -289,8 +337,14 @@ def split(stl, outdir, base=None, bed=A1_BED, margin=6.0, scale=1.0, max_pieces=
             pts, usable_area, area = pin_sites(mesh, ax, c["pos"], hole_d, depth, wall=wall, avoid=avoid)
             sites[(ax, c["pos"])] = pts
             c["pins"] = [[round(a, 2), round(b, 2)] for a, b in pts]; c["solid_mm2"] = round(area, 1)
+            c["joint"] = "pins"
             if len(pts) < 2:
-                res["warnings"].append(f"cut {c['axis']} = {c['pos']:.1f}: room for only {len(pts)} pin(s) (the walls here are thinner than {2 * (hole_d / 2 + wall):.1f} mm): join this seam with glue, a lap or screws")
+                if joint == "auto":                      # walls too thin for two pins: interlocking teeth work in any wall
+                    sites[(ax, c["pos"])] = []; c["pins"] = []; c["joint"] = "keys"
+                    keyed.add((ax, c["pos"]))
+                    res["warnings"].append(f"cut {c['axis']} = {c['pos']:.1f}: the walls here are thinner than {2 * (hole_d / 2 + wall):.1f} mm, so this seam is joined with interlocking teeth ({key_period:g} mm squares, {key_height:g} mm tall) instead of pins; glue them")
+                else:
+                    res["warnings"].append(f"cut {c['axis']} = {c['pos']:.1f}: room for only {len(pts)} pin(s) (the walls here are thinner than {2 * (hole_d / 2 + wall):.1f} mm): use joint=auto for interlocking teeth, or glue / screws")
     # 3. build every piece with OpenSCAD: the cell of the grid, minus the pin holes on its cut faces
     npieces = 0
     pins_total = 0
@@ -300,6 +354,7 @@ def split(stl, outdir, base=None, bed=A1_BED, margin=6.0, scale=1.0, max_pieces=
     for cell in cells:
         lo_c = [edges[i][cell[i]] for i in range(3)]; hi_c = [edges[i][cell[i] + 1] for i in range(3)]
         holes = []
+        adds = []
         nholes = 0
         for i in range(3):
             o1, o2 = (i + 1) % 3, (i + 2) % 3
@@ -307,17 +362,21 @@ def split(stl, outdir, base=None, bed=A1_BED, margin=6.0, scale=1.0, max_pieces=
                 return lo_c[o1] <= ab[0] <= hi_c[o1] and lo_c[o2] <= ab[1] <= hi_c[o2]
             if cell[i] > 0:                                          # a cut plane on this piece's low side: its hole goes up into the piece
                 pos = edges[i][cell[i]]
+                if (i, pos) in keyed:                                # the teeth of the piece below stand in here: leave room for them
+                    holes += _key_blocks(i, pos, lo_c, hi_c, key_period, key_height, grow=key_clearance, below=0.05)
                 for ab in sites.get((i, pos), []):
                     if mine(ab):
                         holes.append(_hole_scad(i, +1, pos, ab, hole_d, depth)); nholes += 1
             if cell[i] < len(edges[i]) - 2:                          # a cut plane on the high side: the hole goes down into the piece
                 pos = edges[i][cell[i] + 1]
+                if (i, pos) in keyed:                                # this piece's teeth stand up past the plane
+                    adds += _key_blocks(i, pos, lo_c, hi_c, key_period, key_height, below=0.5)
                 for ab in sites.get((i, pos), []):
                     if mine(ab):
                         holes.append(_hole_scad(i, -1, pos, ab, hole_d, depth)); nholes += 1
         size = [hi_c[i] - lo_c[i] for i in range(3)]
-        scad = ('difference() {\n  intersection() { import("%s"); translate([%.4f,%.4f,%.4f]) cube([%.4f,%.4f,%.4f]); }\n  union() {\n    %s\n    cube(0.0001);\n  }\n}\n'
-                % (src.replace("\\", "/"), lo_c[0], lo_c[1], lo_c[2], size[0], size[1], size[2], "\n    ".join(holes)))
+        scad = ('difference() {\n  intersection() { import("%s"); union() { translate([%.4f,%.4f,%.4f]) cube([%.4f,%.4f,%.4f]);\n    %s\n  } }\n  union() {\n    %s\n    cube(0.0001);\n  }\n}\n'
+                % (src.replace("\\", "/"), lo_c[0], lo_c[1], lo_c[2], size[0], size[1], size[2], "\n    ".join(adds), "\n    ".join(holes)))
         tmp = os.path.join(work, f"cell_{cell[0]}{cell[1]}{cell[2]}.stl")
         if os.path.exists(tmp):
             os.remove(tmp)
@@ -354,7 +413,10 @@ def split(stl, outdir, base=None, bed=A1_BED, margin=6.0, scale=1.0, max_pieces=
     # 4. nothing lost: the pieces plus the pin holes make the part
     total = sum(p["volume"] for p in res["pieces"])
     res["volume_pieces"] = round(total, 1); res["volume_pin_holes"] = round(hole_volume, 1)
-    mismatch = abs(total + hole_volume - res["volume"]) / max(res["volume"], 1.0)
+    key_bound = sum(key_gap_bound(section_area(mesh, a, p), key_clearance) for a, p in keyed)
+    lost = res["volume"] - total - hole_volume                      # what the clearance of the teeth takes: never negative, never over the bound
+    res["volume_key_gap"] = round(lost, 1) if keyed else 0.0; res["volume_key_gap_bound"] = round(key_bound, 1)
+    mismatch = max(0.0, lost - key_bound, -lost) / max(res["volume"], 1.0)
     res["volume_mismatch"] = round(mismatch, 5)
     if mismatch > 0.01:
         res["ok"] = False

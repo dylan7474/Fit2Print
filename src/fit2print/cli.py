@@ -303,7 +303,7 @@ def cmd_split(args):
             if model and os.path.getmtime(stl) < os.path.getmtime(os.path.join(args.stl, model)):
                 print(f"FAIL  {tb['name']}: {os.path.basename(stl)} is older than {model}: run `fit2print export .` again (a stale part is never cut)"); bad = 1; continue
             res = split_mod.split(stl, os.path.join(args.stl, tb.get("out", "sections")), base=tb["name"], bed=tuple(tb.get("bed", split_mod.A1_BED)), margin=float(tb.get("margin", 6.0)),
-                                  scale=float(tb.get("scale", 1.0)), max_pieces=int(tb.get("max_pieces", 64)), pin_d=float(tb.get("pin", 3.0)), pins=bool(tb.get("pins", True)))
+                                  scale=float(tb.get("scale", 1.0)), max_pieces=int(tb.get("max_pieces", 64)), pin_d=float(tb.get("pin", 3.0)), pins=bool(tb.get("pins", True)), joint=str(tb.get("joint", "auto")))
             print(f"{'ok  ' if res['ok'] else 'FAIL'}  {tb['name']}: {res['summary']}")
             for w in res["warnings"]:
                 print("      NOTE  " + w)
@@ -325,7 +325,7 @@ def cmd_split(args):
             print(f"cannot read --cut {item!r}: write it like x=173.5 (an axis x, y or z, then a position in mm)"); return 1
     try:
         res = split_mod.split(args.stl, args.out, base=args.base, bed=tuple(args.bed) if args.bed else split_mod.A1_BED, margin=args.margin, scale=args.scale,
-                              max_pieces=args.max_pieces, cuts=cuts or None, pin_d=args.pin, pins=not args.no_pins)
+                              max_pieces=args.max_pieces, cuts=cuts or None, pin_d=args.pin, pins=not args.no_pins, joint=args.joint)
     except (ValueError, OSError) as e:
         print(f"cannot split: {e}"); return 1
     print(res["summary"])
@@ -387,7 +387,7 @@ def main(argv=None):
     sp.add_argument("stl", help="an STL file, or a project folder (then every [[split]] table in its fit2print.toml is cut)"); sp.add_argument("--out"); sp.add_argument("--base"); sp.add_argument("--bed", nargs=3, type=float, metavar=("X", "Y", "Z"), help="the bed in mm (default: Bambu A1 256 x 256 x 256)")
     sp.add_argument("--margin", type=float, default=6.0, help="room kept free round the edge of the bed (default 6 mm)"); sp.add_argument("--scale", type=float, default=1.0, help="shrink or grow the whole part first (a test print at 0.4, say)")
     sp.add_argument("--max-pieces", type=int, default=64); sp.add_argument("--cut", action="append", metavar="AXIS=POS", help="cut exactly here (x=173.5), repeatable, instead of planning")
-    sp.add_argument("--pin", type=float, default=3.0, help="pin diameter in mm (default 3.0)"); sp.add_argument("--no-pins", action="store_true"); sp.set_defaults(fn=cmd_split)
+    sp.add_argument("--pin", type=float, default=3.0, help="pin diameter in mm (default 3.0)"); sp.add_argument("--no-pins", action="store_true"); sp.add_argument("--joint", default="auto", choices=["auto", "pins", "keys"], help="auto: pins, and interlocking teeth where the walls are too thin for pins")  ; sp.set_defaults(fn=cmd_split)
     ex = s.add_parser("export", help="write each [[export]] piece of the model as stl/NAME.stl, flat on the bed, ready for the checks and the slicer")
     ex.add_argument("project"); ex.set_defaults(fn=cmd_export)
     a = p.parse_args(argv)
