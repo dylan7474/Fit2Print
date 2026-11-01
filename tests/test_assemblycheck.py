@@ -136,3 +136,15 @@ def test_bad_driver_ring_probe_tables_are_explained():
             f = make(t, bad)
             with pytest.raises(ValueError, match=msg):
                 assemblycheck.load_cases(f)
+
+
+def test_the_command_leaves_a_dated_record_of_each_run():
+    import argparse
+    from fit2print import cli, records
+    with tempfile.TemporaryDirectory() as t:
+        f = make(t, LID + SCREW)
+        assert cli.cmd_assembly_check(argparse.Namespace(project=f, only=None)) == 0
+        assert cli.cmd_assembly_check(argparse.Namespace(project=f, only="lid")) == 0
+        h = records.history(f)
+        assert [r["check"] for r in h] == ["assembly-check", "assembly-check:lid"] and all(r["ok"] for r in h) and h[0]["cases"] >= 3
+        assert os.path.exists(os.path.join(f, "records", "assembly_check.json"))

@@ -71,3 +71,4 @@ Home (your projects, with what needs you), a project's dashboard, **Log a print*
 - `fit2print assembly-check PROJECT` runs checks.toml: [[sweep]] slides parts into place and measures overlap along the way, [[screw]] pushes a rod for each screw (must pass the clear part untouched and bite the thread part). Controls run on every case and must fire, or the checker is reported blind. Result in records/assembly_check.json.
 
 - checks.toml also takes `[[probe]]` (a combination that must be empty, or `must_overlap` as a control), `[[driver]]` (a straight rod for a driver must meet no plastic) and `[[ring]]` (the plastic round a hole must be mostly solid), each with controls that must fire.
+- `fit2print selftest PROJECT [--all] [--strict]` runs the checks on plates whose outcome is known (selftest.toml) and fails if they disagree; `assembly-check` and `selftest` append to records/checks.jsonl.

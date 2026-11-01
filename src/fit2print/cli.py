@@ -289,6 +289,25 @@ def cmd_assembly_check(args):
     os.makedirs(os.path.join(args.project, "records"), exist_ok=True)
     with open(os.path.join(args.project, "records", "assembly_check.json"), "w") as fh:
         json.dump(r, fh, indent=1, default=float)
+    from . import records
+    records.append(args.project, "assembly-check" + (f":{args.only}" if args.only else ""), r["ok"], cases=len(r["results"]),
+                   failed=sum(1 for x in r["results"] if x.get("ok") is False), controls_ok=r["controls_ok"])
+    return 0 if r["ok"] else 1
+
+def cmd_selftest(args):
+    from . import selftest
+    target = args.manifest
+    if target and os.path.isdir(target):
+        target = os.path.join(target, "selftest.toml")
+    if target and not os.path.exists(target):
+        print(f"no manifest at {target} (only the synthetic cases will run)"); target = None
+    try:
+        r = selftest.run(target, strict=args.strict, include_slow=args.all)
+    except (ValueError, OSError) as e:
+        print(f"cannot run the selftest: {e}"); return 1
+    if target and os.path.isdir(args.manifest):
+        from . import records
+        records.append(args.manifest, "selftest", r["ok"], passed=r["passed"], failed=r["failed"], skipped=r["skipped"])
     return 0 if r["ok"] else 1
 
 def cmd_coupon(args):
@@ -405,6 +424,9 @@ def main(argv=None):
     st.add_argument("project"); st.add_argument("--set", choices=[k for k, _ in __import__("fit2print.stage", fromlist=["STAGES"]).STAGES]); st.set_defaults(fn=cmd_stage)
     ac = s.add_parser("assembly-check", help="a virtual build from checks.toml: slide each part into place and push a rod for each screw, with controls that must fire")
     ac.add_argument("project"); ac.add_argument("--only", default=None, help="run only the cases whose name contains this text"); ac.set_defaults(fn=cmd_assembly_check)
+    st = s.add_parser("selftest", help="run the checks on plates whose outcome is known (selftest.toml) and fail if they disagree: is the checker still telling the truth?")
+    st.add_argument("manifest", nargs="?", default=None, help="a project folder or a selftest.toml (default: only the built-in synthetic cases)"); st.add_argument("--strict", action="store_true", help="a missing or skipped fixture is a failure"); st.add_argument("--all", action="store_true", help="also run the fixtures marked slow (minutes each)")
+    st.set_defaults(fn=cmd_selftest)
     cp = s.add_parser("coupon", help="cut small test pieces (coupons) out of a part's real STL, to try one doubtful spot before a long print")
     cp.add_argument("stl"); cp.add_argument("--out", required=True); cp.add_argument("--zmax", type=float, help="drop everything above this height (mm)")
     cp.add_argument("--box", nargs=5, action="append", metavar=("NAME", "X0", "X1", "Y0", "Y1")); cp.set_defaults(fn=cmd_coupon)
