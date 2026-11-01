@@ -50,6 +50,7 @@ def overhangs(mesh, res=0.8):
         if prev is not None:
             supported = ndi.binary_dilation(prev, iterations=1)
             lab, n = ndi.label(cur & ~supported)
+            dist = ndi.distance_transform_edt(~prev) * res if n else None       # straight-line distance from the layer below
             for i in range(1, n + 1):
                 reg = lab == i
                 ys, xs = np.where(reg)
@@ -57,7 +58,11 @@ def overhangs(mesh, res=0.8):
                 if area < MIN_REGION:
                     continue
                 seeds = ndi.binary_dilation(supported, cross) & reg
-                found.append((area, z, x0 + xs.min() * res, x0 + xs.max() * res, y0 + ys.min() * res, y0 + ys.max() * res, geodesic_span(reg, seeds, res)))
+                # the span is how far the plastic starts from the layer below: along the region from where it touches support (geodesic), but never
+                # more than the straight-line distance. A thin strip (the apex of a bore closing, 124 mm long and 1 px wide) reads 62 mm along itself
+                # yet is nowhere more than a few mm from the wall: found on Phonosphere's port_sleeve, 2026-11-01.
+                span = min(geodesic_span(reg, seeds, res), float(dist[reg].max()))
+                found.append((area, z, x0 + xs.min() * res, x0 + xs.max() * res, y0 + ys.min() * res, y0 + ys.max() * res, span))
         prev = cur
     return found
 

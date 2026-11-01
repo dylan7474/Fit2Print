@@ -35,6 +35,14 @@ def test_ledge_is_a_shelf_and_the_small_pilot_roof_is_not(shelf):
     assert small, "the pilot's roof is an overhang the detector sees but must not paint"
 
 
+def test_the_apex_of_a_bore_is_a_bridge_not_a_shelf(tmp_path):
+    # a 134 mm tube bored along x: the bore closes at its apex in a long thin sliver. Measured along itself it is 60+ mm; it is nowhere far from the wall.
+    m = scad_mesh(tmp_path, "tube", "difference(){translate([-67,-9,0])cube([134,18,14.5]);translate([-70,0,4.5])rotate([0,90,0])cylinder(d=9.6,h=140,$fn=64);}")
+    spans = [r[6] for r in support.overhangs(m)]
+    assert spans and max(spans) < support.PAINT_SPAN, spans
+    assert support.shelves(m) == []
+
+
 def test_a_plain_block_has_no_shelf(tmp_path):
     m = trimesh.creation.box(extents=[30, 30, 20]); m.apply_translation(-m.bounds[0])
     assert support.shelves(m) == []
