@@ -62,3 +62,5 @@ One self-contained page: what needs you, a board of every part by state (not che
     fit2print serve                      # http://localhost:8750 , the projects listed in ~/.config/fit2print/config.toml
     fit2print serve --host 0.0.0.0       # on the network (a phone on your wifi): needs a token, made for you if you give none
 Home (your projects, with what needs you), a project's dashboard, **Log a print** (a few words, a result, a photo) and **New project**. Standard library only. The **printer panel** shows the printer's live status and camera and links the running job to its project: it reads `~/.config/fit2print/printer.toml` (`[printer]` host, serial, access_code; keep it readable by you only). It is read-only: it listens to the printer's own report and asks it to repeat its status; it never sends a command that moves, heats or stops anything. The assistant panel is not connected yet. See [docs/mockups](docs/mockups/).
+
+- `fit2print plate --split NAME_split.json --out DIR` slices every section and the pin plate from a split, judges each, and fails if any is blocked. It refuses a failed, incomplete or stale split.

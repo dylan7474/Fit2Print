@@ -146,3 +146,56 @@ class Project(unittest.TestCase):
     def test_a_project_with_no_split_table_says_so(self):
         open(os.path.join(self.f, "fit2print.toml"), "w").write('id = "x"\nname = "x"\nkind = "design-and-print"\nadapter = "generic"\nprinter_profile = "bambu_a1_pla"\n')
         self.assertEqual(self.run_cli(self.f), 1)
+
+
+# ---- plate --split ----------------------------------------------------------
+def _fake_split(tmp_path, ok=True):
+    import json
+    src = tmp_path / "p.stl"; src.write_text("x")
+    sec = tmp_path / "p_s01.stl"; sec.write_text("x")
+    pins = tmp_path / "p_pins.stl"; pins.write_text("x")
+    d = {"ok": ok, "summary": "s", "source": str(src), "pieces": [{"file": str(sec)}], "pins": {"count": 1, "file": str(pins)}}
+    j = tmp_path / "p_split.json"; j.write_text(json.dumps(d))
+    return j, src, sec, pins
+
+
+def _args(j, tmp_path):
+    import argparse
+    return argparse.Namespace(split=str(j), out=str(tmp_path / "o"), filament="pla_black", project=None)
+
+
+def test_plate_split_refuses_failed_split(tmp_path, capsys):
+    from fit2print import cli
+    j, *_ = _fake_split(tmp_path, ok=False)
+    assert cli._plate_split(_args(j, tmp_path), None) == 1
+    assert "REFUSED" in capsys.readouterr().out
+
+
+def test_plate_split_refuses_missing_section(tmp_path, capsys):
+    from fit2print import cli
+    j, src, sec, pins = _fake_split(tmp_path)
+    sec.unlink()
+    assert cli._plate_split(_args(j, tmp_path), None) == 1
+    assert "missing" in capsys.readouterr().out
+
+
+def test_plate_split_refuses_stale_sections(tmp_path, capsys):
+    import os
+    from fit2print import cli
+    j, src, sec, pins = _fake_split(tmp_path)
+    os.utime(sec, (1000, 1000)); os.utime(pins, (1000, 1000))
+    assert cli._plate_split(_args(j, tmp_path), None) == 1
+    assert "newer" in capsys.readouterr().out
+
+
+def test_plate_split_one_block_fails_the_run(tmp_path, monkeypatch, capsys):
+    from fit2print import cli, plate
+    j, *_ = _fake_split(tmp_path)
+    seen = []
+    def fake(f, *a, **k):
+        seen.append(f)
+        return {"part": "x", "verdict": "BLOCK" if f.endswith("pins.stl") else "PASS", "minutes": 5, "grams": 1, "file": "f", "notes": []}
+    monkeypatch.setattr(plate, "make", fake)
+    assert cli._plate_split(_args(j, tmp_path), None) == 1
+    assert len(seen) == 2
+    assert "BLOCKED" in capsys.readouterr().out

@@ -64,8 +64,10 @@ def cmd_plate(args):
     marker = read_marker(args.project) if args.project else {}
     src = [os.path.join(args.project, s) for s in ([marker["model"]] if isinstance(marker.get("model"), str) else marker.get("model", []))] if args.project else None
     bad = 0
+    if args.split:
+        return _plate_split(args, cfg)
     if not args.stl and not args.group:
-        print("plate needs an STL file, or --group NAME"); return 1
+        print("plate needs an STL file, --group NAME, or --split FILE_split.json"); return 1
     if args.group:
         if not args.project:
             print("plate --group needs --project"); return 1
@@ -82,6 +84,35 @@ def cmd_plate(args):
         for n in r["notes"]:
             print("      " + n)
         bad |= r["verdict"] == "BLOCK"
+    return 1 if bad else 0
+
+def _plate_split(args, cfg):
+    """plate --split NAME_split.json: slice every section and the pin plate; one verdict per file, worst one decides."""
+    import json, os
+    try:
+        d = json.load(open(args.split))
+    except (OSError, ValueError) as e:
+        print(f"cannot read {args.split}: {e}"); return 1
+    if not d.get("ok"):
+        print("REFUSED: that split did not finish OK (" + str(d.get("summary")) + "); fix the split first"); return 1
+    src = d.get("source")
+    files = [p["file"] for p in d["pieces"]]
+    if d.get("pins", {}).get("count"):
+        files.append(d["pins"]["file"])
+    for f in files + ([src] if src else []):
+        if not os.path.isfile(f):
+            print(f"REFUSED: {f} is missing (re-run fit2print split)"); return 1
+    if src and any(os.path.getmtime(f) < os.path.getmtime(src) for f in files):
+        print("REFUSED: the source STL is newer than the sections; re-run fit2print split"); return 1
+    bad = 0; total = 0
+    for f in files:
+        r = plate.make(f, args.out, cfg, filament=args.filament, project=args.project)
+        total += r["minutes"] or 0
+        print(f"{r['part']:24} {r['verdict']:6} {r['minutes']} min {r['grams']} g -> {r['file']}")
+        for n in r["notes"]:
+            print("      " + n)
+        bad |= r["verdict"] == "BLOCK"
+    print(f"{len(files)} plates, {total} min in all" + ("  -- AT LEAST ONE BLOCKED" if bad else ""))
     return 1 if bad else 0
 
 def cmd_init(args):
@@ -327,7 +358,7 @@ def main(argv=None):
     d.set_defaults(fn=cmd_dashboard)
     pl = s.add_parser("plate", help="slice an STL with Bambu Studio and judge the toolpaths (parts that print without supports)")
     pl.add_argument("stl", nargs="*"); pl.add_argument("--group", default=None, help="slice the [[export]] pieces of this group as one multi-colour plate (needs --project)"); pl.add_argument("--out", required=True); pl.add_argument("--project", default=None, help="project folder: records the result, and refuses an STL older than its model")
-    pl.add_argument("--filament", default="pla_black"); pl.add_argument("--profile", default=None)
+    pl.add_argument("--split", default=None, help="slice every section named in a NAME_split.json from `fit2print split`"); pl.add_argument("--filament", default="pla_black"); pl.add_argument("--profile", default=None)
     pl.set_defaults(fn=cmd_plate)
     i = s.add_parser("init", help="start a new project folder from the template (marker, brief, NEXT.md, AI rules)")
     i.add_argument("folder"); i.add_argument("--name", required=True); i.add_argument("--kind", default="design-and-print"); i.add_argument("--printer-profile", default="bambu_a1_pla")
