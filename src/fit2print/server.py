@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Access: it is a plain website with no login of its own. It listens on 127.0.0.1 only unless you pass --host; anything in front of it (a tunnel, a login, a firewall) is that thing's job.
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, socketserver, urllib.parse
-from . import archive as archive_mod, checkview, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, componentview, render as render_mod, printer as printer_mod, project
+from . import archive as archive_mod, checkview, downloads as dl_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, componentview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -134,6 +134,41 @@ def plate_card(pid, folder, marker):
                    for n, v in sorted(pl.items()))
     return f"<div class=card><h3>Layer preview</h3><div class=meta>Step through a sliced plate exactly as the printer will lay it down.</div>{rows}</div>"
 
+def downloads_card(pid, folder, marker):
+    """'Downloads': what this project has made that can go on the printer or be kept, with one-click links. Always shown, so nobody has to know where the files are."""
+    es = dl_mod.collect(folder, marker)
+    q = urllib.parse.quote
+    by = {g: [e for e in es if e["group"] == g] for g, _ in dl_mod.GROUPS}
+    if not es:
+        return ("<div class=card id=dlcard><h3>Downloads</h3><div class=meta>Nothing to download yet. The STL models appear after the export, the print files (3MF) after the plate stage."
+                f" <a href='/p/{esc(pid)}/files'>See the files page</a>.</div></div>")
+    top = "".join(f"<div class=row style='padding:5px 0;border-top:1px solid var(--line)'><a href='/p/{esc(pid)}/dl/{q(e['rel'])}'><b>{esc(e['name'])}</b></a>"
+                  f"<span class=small>{esc(e['label'])} {dl_mod.human(e['size'])}</span></div>" for e in by["print"][:6])
+    more = f"<div class=small>and {len(by['print']) - 6} more print files</div>" if len(by["print"]) > 6 else ""
+    counts = f"{len(by['print'])} print file(s), {len(by['models'])} model(s), {len(by['reports'])} report(s)"
+    return (f"<div class=card id=dlcard><h3>Downloads</h3><div class=meta>{esc(counts)}. Print files open straight in Bambu Studio.</div>{top}{more}"
+            f"<div class=actions style='margin-top:10px'><a class=btn href='/p/{esc(pid)}/download.zip?set=print'>All print files (zip)</a> "
+            f"<a class='btn ghost' href='/p/{esc(pid)}/download.zip?set=all'>Everything (zip)</a> <a class='btn ghost' href='/p/{esc(pid)}/files'>All files</a></div></div>")
+
+def files_page(pid, folder, marker, name):
+    q = urllib.parse.quote
+    es = dl_mod.collect(folder, marker)
+    body = f"<div class=card><h3>Files: {esc(name)}</h3><div class=meta><a href='/p/{esc(pid)}'>&larr; back to the project</a></div></div>"
+    for g, title in dl_mod.GROUPS:
+        xs = sorted((e for e in es if e["group"] == g), key=lambda e: (-e["mtime"], e["name"]))
+        if not xs:
+            continue
+        rows = "".join(f"<div class=row style='padding:5px 0;border-top:1px solid var(--line)'><a href='/p/{esc(pid)}/dl/{q(e['rel'])}'><b>{esc(e['name'])}</b></a>"
+                       + (f" <a class=small href='/p/{esc(pid)}/dl/{q(e['rel'])}?view=1'>view</a>" if e["name"].endswith(".html") else "")
+                       + f"<span class=small>{esc(e['label'])} {dl_mod.human(e['size'])} &middot; {esc(datetime.datetime.fromtimestamp(e['mtime']).strftime('%d %b %H:%M'))}</span></div>" for e in xs)
+        z = f" <a class=small href='/p/{esc(pid)}/download.zip?set={g}'>download all {len(xs)} as a zip</a>" if len(xs) > 1 else ""
+        body += f"<div class=card><h3>{esc(title)}</h3>{z}{rows}</div>"
+    if not es:
+        body += "<div class=card>Nothing has been made yet. The STL models appear after the export, the print files (3MF) after the plate stage.</div>"
+    else:
+        body += f"<div class=card><a class=btn href='/p/{esc(pid)}/download.zip?set=all'>Download everything as one zip</a></div>"
+    return page("Files: " + name, body)
+
 def stage_card(pid, folder, a_ok):
     """The stage strip and the one button that moves the project on. Only the person presses it."""
     cur = stage_mod.current(folder)
@@ -146,7 +181,9 @@ def stage_card(pid, folder, a_ok):
     btn = (f"<button class=btn id=gobtn type=button data-to='{nxt}'>{esc(gate)} &rarr;</button>" if gate and nxt else "")
     back = (f"<button class='btn ghost' id=backbtn type=button data-to='{stage_mod.KEYS[i - 1]}'>&larr; Back to {esc(stage_mod.LABEL[stage_mod.KEYS[i - 1]])}</button>" if i > 0 else "")
     hint = {"scope": "The assistant is gathering what it needs. When you are happy with the brief, press the button: that is the signal to stop collecting and start designing.",
-            "concept": "The assistant draws a first concept. Say what to change; press the button when you like it."}.get(cur, "")
+            "concept": "The assistant draws a first concept. Say what to change; press the button when you like it.",
+            "plate": "The print files (3MF) are in the Downloads card below, with a zip of them all. Open one in Bambu Studio.",
+            "print": "The print files (3MF) are in the Downloads card below, with a zip of them all."}.get(cur, "")
     return f"""<div class=card id=stagecard><div class=row><h3>Stage: {esc(stage_mod.LABEL[cur])}</h3><span class=small>only you move it on</span></div><div>{chips}</div>
 {('<div class=small style="margin:8px 0">' + esc(hint) + '</div>') if hint else ''}<div class=actions>{btn}{back}</div></div>
 <script>(function(){{const pid={json.dumps(pid)};for(const id of ['gobtn','backbtn']){{const b=document.getElementById(id);if(!b)continue;
@@ -518,6 +555,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if mh:
                 if mh.group(1) not in hw_mod.load_all(): return self._send(404, page("Not found", "<div class=card>No such component.</div>"))
                 return self._send(200, hardware_detail(mh.group(1), qs.get("msg", [""])[0]), headers=hdr)
+            jf = re.fullmatch(r"/p/([a-z0-9-]+)/(files|download\.zip|dl/(.+))", path)
+            if jf and jf.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[jf.group(1)]
+                if jf.group(2) == "files":
+                    return self._send(200, files_page(jf.group(1), folder, mk, mk.get("name", jf.group(1))), headers=hdr)
+                if jf.group(2) == "download.zip":
+                    want = qs.get("set", ["all"])[0]
+                    if want not in ("all", "print", "models", "reports"): return self._send(404, "no such set", "text/plain")
+                    es = [e for e in dl_mod.collect(folder, mk) if want == "all" or e["group"] == want]
+                    if not es: return self._send(404, page("Nothing to download", "<div class=card>There are no files in that set yet.</div>"))
+                    data, why = dl_mod.zip_bytes(folder, es)
+                    if data is None: return self._send(413, page("Too big", f"<div class=card>{esc(why)}</div>"))
+                    return self._send(200, data, "application/zip", (("Content-Disposition", f'attachment; filename="{jf.group(1)}-{want}-files.zip"'),))
+                rel = urllib.parse.unquote(jf.group(3))
+                e = dl_mod.lookup(folder, mk, rel)                                # the list is the whitelist: anything not listed is a 404
+                if e is None: return self._send(404, "no such file", "text/plain")
+                with open(os.path.join(folder, e["rel"]), "rb") as fh: data = fh.read()
+                if qs.get("view", [""])[0] == "1" and e["name"].endswith(".html"):          # a report may be looked at, but restricted: no scripts, nothing fetched
+                    return self._send(200, data, "text/html; charset=utf-8", (("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"),))
+                return self._send(200, data, dl_mod.content_type(e["name"]), (("Content-Disposition", f'attachment; filename="{e["name"]}"'), ("Cache-Control", "no-cache")))
             m = re.fullmatch(r"/p/([a-z0-9-]+)(/log)?", path)
             jg = re.fullmatch(r"/p/([a-z0-9-]+)/guide(?:/img/([A-Za-z0-9_.-]{1,80}))?", path)
             if jg and jg.group(1) in self.app.projects():
@@ -600,7 +657,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><span><a class=btn href='/p/{pid}/log'>Log a print</a> {archive_button(pid, folder, mk)}</span></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + modelview.card(pid, folder) + components_card(mk) + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + checkview.card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + modelview.card(pid, folder) + components_card(mk) + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + downloads_card(pid, folder, mk) + checkview.card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))
