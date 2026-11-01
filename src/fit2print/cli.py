@@ -85,14 +85,30 @@ def cmd_plate(args):
             print(f"      {n}: {v['shelves']} shelf region(s), {v['faces_painted']} faces painted")
         for n in r["notes"]:
             print("      " + n)
+        if args.report:
+            _write_report(r["file"], args.stl, cfg)
         return 1 if r["verdict"] == "BLOCK" else 0
     for stl in args.stl:
         r = plate.make(stl, args.out, cfg, filament=args.filament, source=src, project=args.project, supports=args.supports)
         print(f"{r['part']:24} {r['verdict']:6} {r['minutes']} min {r['grams']} g -> {r['file']}")
         for n in r["notes"]:
             print("      " + n)
+        if args.report:
+            _write_report(r["file"], [stl], cfg)
         bad |= r["verdict"] == "BLOCK"
     return 1 if bad else 0
+
+def _write_report(plate_file, stls, cfg):
+    """plate --report: the one-page report beside the plate. Never raises: a failed report must not hide a plate result."""
+    from . import report
+    try:
+        doc, overall = report.build(plate_file, [f for f in stls if f.lower().endswith(".stl")], cfg)
+        out = os.path.splitext(plate_file)[0] + "_report.html"
+        with open(out, "w") as fh:
+            fh.write(doc)
+        print(f"      report ({overall}): {out}")
+    except Exception as e:
+        print(f"      report not made: {type(e).__name__}: {e}")
 
 def _plate_split(args, cfg):
     """plate --split NAME_split.json: slice every section and the pin plate; one verdict per file, worst one decides."""
@@ -119,6 +135,8 @@ def _plate_split(args, cfg):
         print(f"{r['part']:24} {r['verdict']:6} {r['minutes']} min {r['grams']} g -> {r['file']}")
         for n in r["notes"]:
             print("      " + n)
+        if args.report:
+            _write_report(r["file"], [f], cfg)
         bad |= r["verdict"] == "BLOCK"
     print(f"{len(files)} plates, {total} min in all" + ("  -- AT LEAST ONE BLOCKED" if bad else ""))
     return 1 if bad else 0
@@ -294,6 +312,22 @@ def cmd_selftest(args):
         records.append(args.manifest, "selftest", r["ok"], passed=r["passed"], failed=r["failed"], skipped=r["skipped"])
     return 0 if r["ok"] else 1
 
+def cmd_report(args):
+    from . import report
+    cfg = Settings.load(args.profile)
+    plate = args.plate
+    if not os.path.exists(plate):
+        print(f"no such plate: {plate}"); return 1
+    out = os.path.expanduser(args.out) if args.out else os.path.splitext(plate)[0] + "_report.html"
+    try:
+        doc, overall = report.build(plate, args.stl, cfg)
+    except (ValueError, OSError, RuntimeError) as e:
+        print(f"cannot make the report: {e}"); return 1
+    with open(out, "w") as fh:
+        fh.write(doc)
+    print(f"{overall}  {out}")
+    return 1 if overall == "BLOCK" else 0
+
 def cmd_coupon(args):
     from . import coupon as coupon_mod
     try:
@@ -384,7 +418,7 @@ def main(argv=None):
     d.set_defaults(fn=cmd_dashboard)
     pl = s.add_parser("plate", help="slice an STL with Bambu Studio and judge the toolpaths (parts that print without supports)")
     pl.add_argument("stl", nargs="*"); pl.add_argument("--group", default=None, help="slice the [[export]] pieces of this group as one multi-colour plate (needs --project)"); pl.add_argument("--out", required=True); pl.add_argument("--project", default=None, help="project folder: records the result, and refuses an STL older than its model")
-    pl.add_argument("--supports", default="auto", choices=["auto", "none"], help="auto: paint support enforcers under shelves and check no support fills a small hole; none: never paint"); pl.add_argument("--together", action="store_true", help="put all the STLs on ONE plate (each part is painted and checked on its own)"); pl.add_argument("--name", default=None, help="name of the --together plate"); pl.add_argument("--split", default=None, help="slice every section named in a NAME_split.json from `fit2print split`"); pl.add_argument("--filament", default="pla_black"); pl.add_argument("--profile", default=None)
+    pl.add_argument("--supports", default="auto", choices=["auto", "none"], help="auto: paint support enforcers under shelves and check no support fills a small hole; none: never paint"); pl.add_argument("--report", action="store_true", help="also write the one-page report (a picture of every flagged spot) beside each plate"); pl.add_argument("--together", action="store_true", help="put all the STLs on ONE plate (each part is painted and checked on its own)"); pl.add_argument("--name", default=None, help="name of the --together plate"); pl.add_argument("--split", default=None, help="slice every section named in a NAME_split.json from `fit2print split`"); pl.add_argument("--filament", default="pla_black"); pl.add_argument("--profile", default=None)
     pl.set_defaults(fn=cmd_plate)
     i = s.add_parser("init", help="start a new project folder from the template (marker, brief, NEXT.md, AI rules)")
     i.add_argument("folder"); i.add_argument("--name", required=True); i.add_argument("--kind", default="design-and-print"); i.add_argument("--printer-profile", default="bambu_a1_pla")
@@ -411,6 +445,9 @@ def main(argv=None):
     st = s.add_parser("selftest", help="run the checks on plates whose outcome is known (selftest.toml) and fail if they disagree: is the checker still telling the truth?")
     st.add_argument("manifest", nargs="?", default=None, help="a project folder or a selftest.toml (default: only the built-in synthetic cases)"); st.add_argument("--strict", action="store_true", help="a missing or skipped fixture is a failure"); st.add_argument("--all", action="store_true", help="also run the fixtures marked slow (minutes each)")
     st.set_defaults(fn=cmd_selftest)
+    rp = s.add_parser("report", help="one page, plain English, with a picture of the real layer at every spot the checks flagged")
+    rp.add_argument("plate", help="a sliced .3mf"); rp.add_argument("stl", nargs="*", help="the design STLs of the parts on the plate (adds the as-built comparison)")
+    rp.add_argument("--out", default=None, help="default: PLATE_report.html beside the plate"); rp.add_argument("--profile", default=None); rp.set_defaults(fn=cmd_report)
     cp = s.add_parser("coupon", help="cut small test pieces (coupons) out of a part's real STL, to try one doubtful spot before a long print")
     cp.add_argument("stl"); cp.add_argument("--out", required=True); cp.add_argument("--zmax", type=float, help="drop everything above this height (mm)")
     cp.add_argument("--box", nargs=5, action="append", metavar=("NAME", "X0", "X1", "Y0", "Y1")); cp.set_defaults(fn=cmd_coupon)

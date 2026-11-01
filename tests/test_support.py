@@ -112,3 +112,10 @@ def test_negative_control_auto_supports_fill_the_pilot(shelf, tmp_path):
     dest, _ = plate.slice_stl(shelf, str(tmp_path / "o"), "pla_black", str(prof), "auto")
     layers, _, _ = gcode.parse(gcode.read_gcode(dest), Settings.load(None).filament_area)
     assert support.holes_with_support(trimesh.load(shelf), layers), "the old failure must be caught"
+
+
+def test_names_with_xml_special_characters_are_matched(tmp_path):
+    import zipfile
+    fake_plate(tmp_path / "x.3mf", ["a&amp;b.stl", "c&lt;d&gt;.stl"])
+    d = tmp_path / "u"; zipfile.ZipFile(tmp_path / "x.3mf").extractall(d)
+    assert set(support.plate_objects(str(d))) == {"a&b.stl", "c<d>.stl"}

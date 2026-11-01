@@ -7,7 +7,7 @@ The slicer profile has supports ON in *manual* mode: it builds support only wher
   3. holes_with_support(...): after slicing, any support plastic lying inside a small closed void of the part (a screw pilot filled with support
      is the failure that cost a print on 2026-10-27) is reported. Auto supports always fail this; painted ones must pass.
 """
-import json, os, re, tempfile, zipfile
+import html, json, os, re, tempfile, zipfile
 import numpy as np
 from scipy import ndimage as ndi
 from . import layers as layers_mod
@@ -85,7 +85,7 @@ def plate_objects(root):
     for oid, body in re.findall(r'<object id="(\d+)">(.*?)</object>', cfg, re.S):
         m = re.search(r'<metadata key="name" value="([^"]*)"', body)
         if m and oid in ids:
-            names[m.group(1)] = ids[oid]
+            names[html.unescape(m.group(1))] = ids[oid]            # the 3MF stores names XML-escaped (a name with & < > would never match)
     return names
 
 
