@@ -14,7 +14,7 @@ REMOTE is a folder, or host:folder reached over ssh."""
 import datetime, hashlib, json, os, shlex, subprocess, tempfile
 
 STATE = ".fit2print-sync.json"
-SKIP_DIRS = ("renders", "plates", "stl", "photos", ".git", "__pycache__")
+SKIP_DIRS = ("renders", "plates", "stl", "photos", ".git", "__pycache__", ".f2p_cache")
 MAXSIZE = 3_000_000
 ARTEFACT = ("from-server-", "replaced-local-version-", "replaced-server-version-")
 

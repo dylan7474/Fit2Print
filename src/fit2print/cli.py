@@ -276,6 +276,21 @@ def cmd_export(args):
             print(f"FAIL  {r['name']}: {r['error']}"); bad = 1
     return bad
 
+def cmd_assembly_check(args):
+    from . import assemblycheck
+    marker = read_marker(args.project)
+    if not marker.get("model"):
+        print("the project's marker needs model = \"file.scad\""); return 1
+    try:
+        r = assemblycheck.run(args.project, marker, only=args.only)
+    except (ValueError, RuntimeError, OSError) as e:
+        print(f"cannot run the virtual build: {e}"); return 1
+    import json
+    os.makedirs(os.path.join(args.project, "records"), exist_ok=True)
+    with open(os.path.join(args.project, "records", "assembly_check.json"), "w") as fh:
+        json.dump(r, fh, indent=1, default=float)
+    return 0 if r["ok"] else 1
+
 def cmd_coupon(args):
     from . import coupon as coupon_mod
     try:
@@ -388,6 +403,8 @@ def main(argv=None):
     rn.add_argument("project"); rn.set_defaults(fn=cmd_render)
     st = s.add_parser("stage", help="show a project's stage (--set STAGE to set it directly, e.g. for an established project)")
     st.add_argument("project"); st.add_argument("--set", choices=[k for k, _ in __import__("fit2print.stage", fromlist=["STAGES"]).STAGES]); st.set_defaults(fn=cmd_stage)
+    ac = s.add_parser("assembly-check", help="a virtual build from checks.toml: slide each part into place and push a rod for each screw, with controls that must fire")
+    ac.add_argument("project"); ac.add_argument("--only", default=None, help="run only the cases whose name contains this text"); ac.set_defaults(fn=cmd_assembly_check)
     cp = s.add_parser("coupon", help="cut small test pieces (coupons) out of a part's real STL, to try one doubtful spot before a long print")
     cp.add_argument("stl"); cp.add_argument("--out", required=True); cp.add_argument("--zmax", type=float, help="drop everything above this height (mm)")
     cp.add_argument("--box", nargs=5, action="append", metavar=("NAME", "X0", "X1", "Y0", "Y1")); cp.set_defaults(fn=cmd_coupon)
