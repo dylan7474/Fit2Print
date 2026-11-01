@@ -5,10 +5,11 @@
   3. read the sliced toolpaths and judge them (toolpath.report): BLOCK stops the plate, CHECK must be looked at by a person;
   4. note any support the slicer built where none was meant (it would fill holes) and write a record line into the project.
   5. supports=auto: shelves get painted support enforcers (support.py), the plate is re-sliced, and support inside a small hole BLOCKs.
-Still in Phonosphere's make_plate.py and to come: the as-built comparison (design against the nozzle path), flipped print orientations.
+  6. the as-built comparison (asbuilt.py): the nozzle path laid over the model, layer by layer. FILLED (support in a hole) BLOCKs; MISSING/EXTRA are CHECKs.
+Still in Phonosphere's make_plate.py and to come: the flipped print orientations (gate.PRINT_ORIENT) and multi-part plates.
 """
 import datetime, hashlib, json, os, shutil, subprocess, tempfile
-from . import export as export_mod, gcode, multicolour, support, toolpath
+from . import asbuilt, export as export_mod, gcode, multicolour, support, toolpath
 from .settings import ROOT, Settings
 
 PROFILES = os.path.join(ROOT, "profiles", "bambu_a1")
@@ -95,7 +96,7 @@ def make_group(folder, marker, group, outdir, cfg=None, profiles=PROFILES):
     rec["filaments"] = {str(n): dict(colour=colours[n], pieces=[p["name"] for p, k in zip(ps, nums) if k == n]) for n in colours}
     return rec
 
-def _judge(dest, plate, name, cfg, stl, project, regions=(), painted=0):
+def _judge(dest, plate, name, cfg, stl, project, regions=(), painted=0, asbuilt_check=True):
     layers, _, _ = gcode.parse(gcode.read_gcode(dest), cfg.filament_area)
     supports = sum(1 for segs in layers.values() for f, s, _ in segs if f.startswith("Support"))
     v, lines = toolpath.report(layers, cfg)
@@ -114,6 +115,12 @@ def _judge(dest, plate, name, cfg, stl, project, regions=(), painted=0):
     elif supports:
         notes.append(f"{supports} support segments were built where none were painted (they would fill holes): look at the plate")
         v = "CHECK" if v == "PASS" else v
+    if asbuilt_check and isinstance(stl, str) and stl.endswith((".stl", ".STL")):
+        import trimesh
+        av, alines = asbuilt.check(layers, trimesh.load(stl))
+        for t in alines:
+            notes.append(("BLOCK: " if av == "BLOCK" else "CHECK: ") + t)
+        v = "BLOCK" if av == "BLOCK" or v == "BLOCK" else ("CHECK" if av == "CHECK" and v == "PASS" else v)
     rec = dict(date=datetime.date.today().isoformat(), part=name, verdict=v, minutes=round(plate["total_predication"] / 60),
                grams=round(sum(f["total_used_g"] for f in plate["filaments"])), notes=notes, file=dest, stl_sha=sha(stl) if isinstance(stl, str) else "+".join(sha(x) for x in stl), profile=cfg.name)
     if project:
