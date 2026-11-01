@@ -337,6 +337,23 @@ def cmd_calibrate(args):
         print(f"cannot calibrate: {e}"); return 1
     return 0
 
+def cmd_register(args):
+    from . import register
+    marker = read_marker(args.project)
+    try:
+        path, r = register.write(args.project, marker, args.out)
+    except ValueError as e:
+        print(f"cannot make the register: {e}"); return 1
+    print(f"{path}: {r['parts']} parts, about {r['minutes'] / 60:.0f} h and {r['grams'] / 1000:.2f} kg")
+    problems = []
+    if r["unregistered"]: problems.append(f"{len(r['unregistered'])} exported but not described in parts.toml: {', '.join(r['unregistered'])}")
+    if r["not_exported"]: problems.append(f"{len(r['not_exported'])} described but not exported: {', '.join(r['not_exported'])}")
+    if r["stale"]: problems.append(f"{r['stale']} STL(s) older than the model: run fit2print export")
+    if r["never_checked"]: problems.append(f"{r['never_checked']} part(s) never checked")
+    for t in problems:
+        print("  " + t)
+    return 1 if (problems and args.strict) else 0
+
 def cmd_report(args):
     from . import report
     cfg = Settings.load(args.profile)
@@ -477,6 +494,9 @@ def main(argv=None):
     cb.add_argument("--holes"); cb.add_argument("--outer"); cb.add_argument("--pin", choices=["ok", "tight", "loose"])
     cb.add_argument("--bridge-ok", type=float); cb.add_argument("--shelf-ok", type=float); cb.add_argument("--wall-ok", type=float); cb.add_argument("--lean-ok", type=float); cb.add_argument("--flow", type=float)
     cb.set_defaults(fn=cmd_calibrate)
+    rg = s.add_parser("register", help="every part of the project in one table: what it is, its latest plate check, whether its STL is stale, what really happened on the printer (parts.toml)")
+    rg.add_argument("project"); rg.add_argument("--out", default=None, help="default PARTS_REGISTER.md in the project"); rg.add_argument("--strict", action="store_true", help="exit 1 if anything is unregistered, not exported, stale or never checked")
+    rg.set_defaults(fn=cmd_register)
     rp = s.add_parser("report", help="one page, plain English, with a picture of the real layer at every spot the checks flagged")
     rp.add_argument("plate", help="a sliced .3mf"); rp.add_argument("stl", nargs="*", help="the design STLs of the parts on the plate (adds the as-built comparison)")
     rp.add_argument("--out", default=None, help="default: PLATE_report.html beside the plate"); rp.add_argument("--profile", default=None); rp.set_defaults(fn=cmd_report)
