@@ -6,12 +6,14 @@ on the bed (lowest point at z = 0, centred on the origin in x and y), ready for 
     part = "body"          # the model's `part` value that draws just that piece
     group = "dice"         # optional: pieces of one group keep their places relative to each other (they print together as ONE plate)
     colour = "#1A1A1A"     # optional: the filament colour of the piece in a group; pieces of different colours print in different filaments
+    orient = "flip_x"      # optional: print it another way up than it is drawn: flip_x or flip_y turns it over (a face that must be smooth goes on the bed)
 A group is placed as one: the whole group sits flat on the bed and is centred together, so a piece that fills a hole in another still fits it.
 Drawn with OpenSCAD like the pictures (same command setting); the model file must be inside the project."""
 import os, re, shutil, subprocess
 import numpy as np
 import trimesh
 
+ORIENTS = ("flip_x", "flip_y")
 NAME = re.compile(r"[a-z0-9_-]{1,40}")
 COLOUR = re.compile(r"#[0-9a-fA-F]{6}")
 
@@ -25,7 +27,10 @@ def pieces(marker):
             raise ValueError(f"the group of [[export]] {e['name']} needs lower-case letters, digits, - or _ (got {g!r})")
         if c is not None and not COLOUR.fullmatch(str(c)):
             raise ValueError(f"the colour of [[export]] {e['name']} must look like #1A1A1A (got {c!r})")
-        out.append(dict(name=e["name"], part=str(e.get("part", e["name"])), group=g, colour=str(c).upper() if c else None))
+        o = e.get("orient")
+        if o is not None and o not in ORIENTS:
+            raise ValueError(f"the orient of [[export]] {e['name']} must be one of {', '.join(ORIENTS)} (got {o!r})")
+        out.append(dict(name=e["name"], part=str(e.get("part", e["name"])), group=g, colour=str(c).upper() if c else None, orient=o))
     return out
 
 def groups(marker):
@@ -57,7 +62,10 @@ def export(folder, marker, command=None, timeout=300):
             if r.returncode != 0 or not os.path.exists(tmp) or os.path.getsize(tmp) < 200:
                 res[p["name"]] = dict(name=p["name"], ok=False, error=(r.stderr.strip().splitlines() or ["OpenSCAD made nothing (does the model draw something for part = \"%s\"?)" % p["part"]])[-1][:200], file=None)
             else:
-                drawn[p["name"]] = trimesh.load(tmp)
+                m = trimesh.load(tmp)
+                if p.get("orient"):                                        # turned over (a half turn about x or y), then dropped to the bed with the rest
+                    m.apply_transform(trimesh.transformations.rotation_matrix(np.pi, [1, 0, 0] if p["orient"] == "flip_x" else [0, 1, 0]))
+                drawn[p["name"]] = m
         except FileNotFoundError:
             res[p["name"]] = dict(name=p["name"], ok=False, error="OpenSCAD is not installed on this machine", file=None)
         except subprocess.TimeoutExpired:

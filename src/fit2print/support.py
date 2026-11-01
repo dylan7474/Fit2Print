@@ -67,44 +67,86 @@ def shelves(mesh, res=0.8):
     return [f for f in overhangs(mesh, res) if f[6] > PAINT_SPAN and f[1] >= MIN_VOID]
 
 
-def paint(base3mf, mesh, regions, dest):
-    """Write `dest`: `base3mf` with support enforcers painted on the downward faces of the shelf regions and manual supports forced on.
-    -> the number of faces painted. Single-object plates only (a refusal, not a guess)."""
+def plate_objects(root):
+    """{file name given to the slicer (e.g. 'a.stl'): path of that object's mesh file} for an unpacked 3MF."""
+    model = open(f"{root}/3D/3dmodel.model").read()
+    ids = {}
+    for oid, body in re.findall(r'<object id="(\d+)"[^>]*>(.*?)</object>', model, re.S):
+        m = re.search(r'p:path="([^"]+)"', body)
+        if m:
+            ids[oid] = root + m.group(1)
+    names = {}
+    cfg = open(f"{root}/Metadata/model_settings.config").read()
+    for oid, body in re.findall(r'<object id="(\d+)">(.*?)</object>', cfg, re.S):
+        m = re.search(r'<metadata key="name" value="([^"]*)"', body)
+        if m and oid in ids:
+            names[m.group(1)] = ids[oid]
+    return names
+
+
+def _paint_text(text, mesh, regions):
+    """-> (new mesh-file text, faces painted): enforcers on the downward faces of the shelf regions."""
+    vs = np.array(re.findall(r'<vertex x="([-\d.e]+)" y="([-\d.e]+)" z="([-\d.e]+)"', text), float)
+    T = np.array(re.findall(r'<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"/>', text), int)
+    if len(vs) == 0 or len(T) == 0:
+        raise ValueError("could not read the mesh inside the 3MF")
+    P = vs[T] + (mesh.bounds[0] - vs.min(0))                 # back to the mesh's own coordinates
+    nrm = np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0])
+    ln = np.linalg.norm(nrm, axis=1)
+    nrm = nrm / np.where(ln == 0, 1, ln)[:, None]
+    c = P.mean(axis=1)
+    sel = np.zeros(len(T), bool)
+    for area, z, x0, x1, y0, y1, span in regions:
+        sel |= (nrm[:, 2] < -0.9) & (c[:, 2] > z - 0.32) & (c[:, 2] < z + 0.05) \
+               & (c[:, 0] > x0 - 0.6) & (c[:, 0] < x1 + 0.6) & (c[:, 1] > y0 - 0.6) & (c[:, 1] < y1 + 0.6)
+    parts = text.split("<triangle ")
+    out = [parts[0]] + [seg.replace("/>", ' paint_supports="4"/>', 1) if sel[k] else seg for k, seg in enumerate(parts[1:])]
+    return "<triangle ".join(out), int(sel.sum())
+
+
+def _repack(root, dest):
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+        for r, _, files in os.walk(root):
+            for f in files:
+                full = os.path.join(r, f)
+                z.write(full, os.path.relpath(full, root))
+
+
+def paint_plate(base3mf, items, dest):
+    """Write `dest`: `base3mf` with support enforcers painted on every listed object and manual supports forced on.
+    items = {file name as given to the slicer: (mesh, regions)}. Objects are matched by NAME (not by size, so mirror twins are safe).
+    -> {name: faces painted}. An item whose name is not in the plate is an error, never a silent skip."""
     with tempfile.TemporaryDirectory() as d:
         zipfile.ZipFile(base3mf).extractall(d)
-        objs = [f for f in os.listdir(f"{d}/3D/Objects") if f.endswith(".model")]
-        if len(objs) != 1:
-            raise ValueError("support painting handles a plate with one object only")
-        path = f"{d}/3D/Objects/{objs[0]}"
-        t = open(path).read()
-        vs = np.array(re.findall(r'<vertex x="([-\d.e]+)" y="([-\d.e]+)" z="([-\d.e]+)"', t), float)
-        T = np.array(re.findall(r'<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"/>', t), int)
-        if len(vs) == 0 or len(T) == 0:
-            raise ValueError("could not read the mesh inside the 3MF")
-        P = vs[T] + (mesh.bounds[0] - vs.min(0))                 # back to the mesh's own coordinates
-        nrm = np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0])
-        ln = np.linalg.norm(nrm, axis=1)
-        nrm = nrm / np.where(ln == 0, 1, ln)[:, None]
-        c = P.mean(axis=1)
-        sel = np.zeros(len(T), bool)
-        for area, z, x0, x1, y0, y1, span in regions:
-            sel |= (nrm[:, 2] < -0.9) & (c[:, 2] > z - 0.32) & (c[:, 2] < z + 0.05) \
-                   & (c[:, 0] > x0 - 0.6) & (c[:, 0] < x1 + 0.6) & (c[:, 1] > y0 - 0.6) & (c[:, 1] < y1 + 0.6)
-        parts = t.split("<triangle ")
-        out = [parts[0]]
-        for k, seg in enumerate(parts[1:]):
-            out.append(seg.replace("/>", ' paint_supports="4"/>', 1) if sel[k] else seg)
-        open(path, "w").write("<triangle ".join(out))
+        objs = plate_objects(d)
+        missing = [n for n in items if n not in objs]
+        if missing:
+            raise ValueError(f"not on the plate: {', '.join(missing)} (the plate holds {', '.join(sorted(objs))})")
+        done = {}
+        for name, (mesh, regions) in items.items():
+            text = open(objs[name]).read()
+            if regions:
+                text, n = _paint_text(text, mesh, regions)
+                open(objs[name], "w").write(text)
+            else:
+                n = 0
+            done[name] = n
         cfgp = f"{d}/Metadata/project_settings.config"
         cfg = json.load(open(cfgp))
         cfg.update({"enable_support": "1", "support_type": "normal(manual)", "support_on_build_plate_only": "1"})
         json.dump(cfg, open(cfgp, "w"), indent=1)
-        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
-            for root, _, files in os.walk(d):
-                for f in files:
-                    full = os.path.join(root, f)
-                    z.write(full, os.path.relpath(full, d))
-    return int(sel.sum())
+        _repack(d, dest)
+    return done
+
+
+def paint(base3mf, mesh, regions, dest):
+    """Single-object plate: paint `regions` on its one object. -> faces painted."""
+    with tempfile.TemporaryDirectory() as d:
+        zipfile.ZipFile(base3mf).extractall(d)
+        names = list(plate_objects(d))
+    if len(names) != 1:
+        raise ValueError("support painting handles a plate with one object only (use paint_plate for several)")
+    return paint_plate(base3mf, {names[0]: (mesh, regions)}, dest)[names[0]]
 
 
 def holes_with_support(mesh, layers, res=0.4, allow=(), max_area=1200.0):

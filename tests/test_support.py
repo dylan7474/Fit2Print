@@ -63,13 +63,30 @@ def test_support_in_a_closed_hole_is_reported_and_outside_is_not(tmp_path):
     assert support.holes_with_support(m, _layers(inside), allow=[(100, 2.0, 5, 20, 8, 22, 8)]) == []
 
 
-def test_paint_refuses_a_plate_without_one_object(tmp_path):
+def fake_plate(path, names):
     import zipfile
-    z = tmp_path / "x.3mf"
-    with zipfile.ZipFile(z, "w") as f:
-        f.writestr("3D/Objects/a.model", ""); f.writestr("3D/Objects/b.model", "")
-    with pytest.raises(ValueError):
-        support.paint(str(z), trimesh.creation.box(), [], str(tmp_path / "o.3mf"))
+    model = "<resources>" + "".join(f'<object id="{2 * i + 2}" type="model"><components><component p:path="/3D/Objects/object_{i + 1}.model" objectid="{2 * i + 1}"/></components></object>' for i in range(len(names))) + "</resources>"
+    cfg = "".join(f'<object id="{2 * i + 2}"><metadata key="name" value="{n}"/></object>' for i, n in enumerate(names))
+    with zipfile.ZipFile(path, "w") as f:
+        f.writestr("3D/3dmodel.model", model); f.writestr("Metadata/model_settings.config", cfg)
+        for i in range(len(names)):
+            f.writestr(f"3D/Objects/object_{i + 1}.model", "")
+
+
+def test_single_object_paint_refuses_a_plate_with_two(tmp_path):
+    fake_plate(tmp_path / "x.3mf", ["a.stl", "b.stl"])
+    with pytest.raises(ValueError, match="one object only"):
+        support.paint(str(tmp_path / "x.3mf"), trimesh.creation.box(), [], str(tmp_path / "o.3mf"))
+
+
+def test_objects_are_found_by_name_and_a_missing_name_is_an_error(tmp_path):
+    import zipfile
+    fake_plate(tmp_path / "x.3mf", ["a.stl", "b.stl"])
+    d = tmp_path / "u"; zipfile.ZipFile(tmp_path / "x.3mf").extractall(d)
+    objs = support.plate_objects(str(d))
+    assert set(objs) == {"a.stl", "b.stl"} and objs["b.stl"].endswith("object_2.model")
+    with pytest.raises(ValueError, match="not on the plate: c.stl"):
+        support.paint_plate(str(tmp_path / "x.3mf"), {"c.stl": (trimesh.creation.box(), [])}, str(tmp_path / "o.3mf"))
 
 
 @pytest.mark.skipif(not (have_openscad and have_bambu), reason="needs openscad and bambu-studio")

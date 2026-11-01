@@ -63,5 +63,37 @@ class Groups(Export):
     def test_groups_lists_the_pieces(self):
         self.assertEqual([p["name"] for p in export.groups(self.g)["duo"]], ["body", "dot"])
 
+
+class ExportOrient(unittest.TestCase):
+    """A piece printed the other way up than it is drawn."""
+    FAKE = """#!{py}
+import sys, trimesh
+a = sys.argv; out = a[a.index("-o") + 1]
+base = trimesh.creation.box(extents=(20, 10, 4)); base.apply_translation((0, 0, 2))
+nub = trimesh.creation.box(extents=(4, 4, 6)); nub.apply_translation((0, 0, 7))          # a nub standing on top: 10 mm tall in all
+trimesh.util.concatenate([base, nub]).export(out)
+"""
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory(); self.f = os.path.join(self.d.name, "p"); project.init(self.f, "Orient Test")
+        open(os.path.join(self.f, "model.scad"), "w").write("cube(1);")
+        self.fake = os.path.join(self.d.name, "openscad"); open(self.fake, "w").write(self.FAKE.format(py=sys.executable)); os.chmod(self.fake, 0o755)
+    def tearDown(self): self.d.cleanup()
+    def _z_centroid(self, orient):
+        m = dict(model="model.scad", export=[dict(name="p", part="p", **({"orient": orient} if orient else {}))])
+        r = export.export(self.f, m, [self.fake]); self.assertTrue(r[0]["ok"], r)
+        mesh = trimesh.load(os.path.join(self.f, "stl", "p.stl")); self.assertAlmostEqual(mesh.bounds[0][2], 0, places=3)
+        return mesh.bounds[1][2], mesh.centroid[2]
+    def test_flip_puts_the_heavy_slab_on_the_bed_nub_up_becomes_nub_down(self):
+        h0, c0 = self._z_centroid(None); h1, c1 = self._z_centroid("flip_x"); h2, c2 = self._z_centroid("flip_y")
+        self.assertAlmostEqual(h0, 10, places=2); self.assertAlmostEqual(h1, 10, places=2)
+        self.assertLess(c0, 5); self.assertGreater(c1, c0 + 1)             # flipped: the slab is now on top of the nub, so the mass moves up
+        self.assertAlmostEqual(c1, c2, places=2)
+    def test_a_flipped_piece_is_still_a_valid_solid(self):
+        m = dict(model="model.scad", export=[dict(name="p", part="p", orient="flip_x")])
+        r = export.export(self.f, m, [self.fake]); self.assertTrue(r[0]["watertight"]); self.assertGreater(r[0]["volume"], 0)
+    def test_an_unknown_orient_is_refused(self):                          # NEGATIVE CONTROL
+        with self.assertRaises(ValueError):
+            export.export(self.f, dict(model="model.scad", export=[dict(name="p", part="p", orient="upside_down")]), [self.fake])
+
 if __name__ == "__main__":
     unittest.main()
