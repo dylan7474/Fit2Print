@@ -4,10 +4,11 @@
   2. slice with the Bambu Studio command line (A1 profiles in profiles/bambu_a1);
   3. read the sliced toolpaths and judge them (toolpath.report): BLOCK stops the plate, CHECK must be looked at by a person;
   4. note any support the slicer built where none was meant (it would fill holes) and write a record line into the project.
-Still in Phonosphere's make_plate.py and to come: painting supports under shelves, the as-built comparison, flipped print orientations.
+  5. supports=auto: shelves get painted support enforcers (support.py), the plate is re-sliced, and support inside a small hole BLOCKs.
+Still in Phonosphere's make_plate.py and to come: the as-built comparison (design against the nozzle path), flipped print orientations.
 """
 import datetime, hashlib, json, os, shutil, subprocess, tempfile
-from . import export as export_mod, gcode, multicolour, toolpath
+from . import export as export_mod, gcode, multicolour, support, toolpath
 from .settings import ROOT, Settings
 
 PROFILES = os.path.join(ROOT, "profiles", "bambu_a1")
@@ -46,15 +47,28 @@ def slice_stl(stl, outdir, filament="pla_black", profiles=PROFILES, name=None):
         shutil.copy(os.path.join(d, name + ".3mf"), dest)
     return dest, res["sliced_plates"][0]
 
-def make(stl, outdir, cfg=None, filament="pla_black", source=None, project=None, profiles=PROFILES):
-    """-> dict(part, verdict, minutes, grams, notes, file). The verdict is the worst of the checks."""
+def make(stl, outdir, cfg=None, filament="pla_black", source=None, project=None, profiles=PROFILES, supports="auto"):
+    """-> dict(part, verdict, minutes, grams, notes, file). The verdict is the worst of the checks.
+    supports="auto": shelves (ledges, rebates) found in the model get painted support enforcers and the plate is re-sliced; nothing else is supported.
+    supports="none": never paint (the old behaviour; any support the slicer builds is reported)."""
     cfg = cfg or Settings.load()
     name = os.path.splitext(os.path.basename(stl))[0]
     stale = check_fresh(stl, source)
     if stale:
         raise SystemExit("REFUSED: " + stale)
     dest, plate = slice_stl(stl, outdir, filament, profiles, name)
-    return _judge(dest, plate, name, cfg, stl, project)
+    regions, painted = [], 0
+    if supports == "auto" and stl.endswith((".stl", ".STL")):
+        import trimesh
+        mesh = trimesh.load(stl)
+        regions = support.shelves(mesh)
+        if regions:
+            tmp = os.path.join(tempfile.mkdtemp(), "painted.3mf")
+            painted = support.paint(dest, mesh, regions, tmp)
+            if painted:
+                dest, plate = slice_stl(tmp, outdir, filament, profiles, name)
+            os.unlink(tmp)
+    return _judge(dest, plate, name, cfg, stl, project, regions=regions, painted=painted)
 
 def make_group(folder, marker, group, outdir, cfg=None, profiles=PROFILES):
     """Slice the pieces of one [[export]] group as ONE multi-colour plate (each piece in its own filament). -> the same dict as make()."""
@@ -81,12 +95,23 @@ def make_group(folder, marker, group, outdir, cfg=None, profiles=PROFILES):
     rec["filaments"] = {str(n): dict(colour=colours[n], pieces=[p["name"] for p, k in zip(ps, nums) if k == n]) for n in colours}
     return rec
 
-def _judge(dest, plate, name, cfg, stl, project):
+def _judge(dest, plate, name, cfg, stl, project, regions=(), painted=0):
     layers, _, _ = gcode.parse(gcode.read_gcode(dest), cfg.filament_area)
     supports = sum(1 for segs in layers.values() for f, s, _ in segs if f.startswith("Support"))
     v, lines = toolpath.report(layers, cfg)
     notes = list(lines)
-    if supports:
+    if regions:
+        notes.append(f"{len(regions)} shelf region(s): support enforcers painted on {painted} faces")
+        if not painted:
+            notes.append("BLOCK: a shelf needs support but no faces could be painted"); v = "BLOCK"
+        elif not supports:
+            notes.append("BLOCK: supports were painted but none were built"); v = "BLOCK"
+        if isinstance(stl, str) and stl.endswith((".stl", ".STL")):
+            import trimesh
+            holes = support.holes_with_support(trimesh.load(stl), layers, allow=regions)
+            if holes:
+                notes.append(f"BLOCK: support inside {len(holes)} small hole(s), e.g. at x {holes[0][1]:.0f}, y {holes[0][2]:.0f}"); v = "BLOCK"
+    elif supports:
         notes.append(f"{supports} support segments were built where none were painted (they would fill holes): look at the plate")
         v = "CHECK" if v == "PASS" else v
     rec = dict(date=datetime.date.today().isoformat(), part=name, verdict=v, minutes=round(plate["total_predication"] / 60),

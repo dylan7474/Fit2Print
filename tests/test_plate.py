@@ -27,8 +27,14 @@ class Slicing(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             stem = trimesh.creation.box(extents=(4, 20, 10)); stem.apply_translation((0, 0, 5))
             bar = trimesh.creation.box(extents=(40, 20, 2)); bar.apply_translation((0, 0, 11))
-            r = plate.make(self._stl(d, trimesh.util.concatenate([stem, bar]), "tee"), d)
+            r = plate.make(self._stl(d, trimesh.util.concatenate([stem, bar]), "tee"), d, supports="none")
             self.assertEqual(r["verdict"], "BLOCK", "an 18 mm shelf in the air was not blocked: the plate check is broken")
+    def test_the_same_shelf_prints_when_supports_are_painted(self):      # the fix the control above is waiting for
+        with tempfile.TemporaryDirectory() as d:
+            stem = trimesh.creation.box(extents=(4, 20, 10)); stem.apply_translation((0, 0, 5))
+            bar = trimesh.creation.box(extents=(40, 20, 2)); bar.apply_translation((0, 0, 11))
+            r = plate.make(self._stl(d, trimesh.util.concatenate([stem, bar]), "tee"), d)
+            self.assertNotEqual(r["verdict"], "BLOCK", r["notes"]); self.assertTrue(any("painted on" in n for n in r["notes"]))
     def test_result_is_recorded_in_the_project(self):
         with tempfile.TemporaryDirectory() as d:
             cube = trimesh.creation.box(extents=(15, 15, 6)); cube.apply_translation((0, 0, 3))

@@ -161,7 +161,7 @@ def _fake_split(tmp_path, ok=True):
 
 def _args(j, tmp_path):
     import argparse
-    return argparse.Namespace(split=str(j), out=str(tmp_path / "o"), filament="pla_black", project=None)
+    return argparse.Namespace(split=str(j), out=str(tmp_path / "o"), filament="pla_black", project=None, supports="auto")
 
 
 def test_plate_split_refuses_failed_split(tmp_path, capsys):
