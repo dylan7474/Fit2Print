@@ -6,7 +6,6 @@ PORT=8751
 if ! ss -ltn 2>/dev/null | grep -q ":$PORT "; then
   ssh -o BatchMode=yes -f -N -L $PORT:127.0.0.1:8750 phobos
 fi
-T=$(ssh -o BatchMode=yes phobos 'cat ~/f2p_server/token')
-URL="http://localhost:$PORT/?t=$T"
-echo "phobos page: http://localhost:$PORT/   (opening it in the browser; the token is in the link so you are signed in)"
+URL="http://localhost:$PORT/"
+echo "phobos page: $URL   (opening it in the browser)"
 ${BROWSER:-google-chrome-stable} "$URL" >/dev/null 2>&1 &

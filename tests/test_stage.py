@@ -56,7 +56,7 @@ class AssistantKnowsTheStage(unittest.TestCase):
 class Button(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.TemporaryDirectory(); self.f = os.path.join(self.d.name, "p"); project.init(self.f, "Button Test")
-        self.srv = server.make_server(dict(projects=[self.f], new_projects_dir=os.path.join(self.d.name, "n")), "127.0.0.1", 0, None, None, assistant.Assistant(command=FAKE))
+        self.srv = server.make_server(dict(projects=[self.f], new_projects_dir=os.path.join(self.d.name, "n")), "127.0.0.1", 0, None, assistant.Assistant(command=FAKE))
         self.port = self.srv.server_address[1]; threading.Thread(target=self.srv.serve_forever, daemon=True).start()
     def tearDown(self): self.srv.shutdown(); self.srv.server_close(); self.d.cleanup()
     def post(self, to):

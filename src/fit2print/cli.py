@@ -134,22 +134,9 @@ def cmd_init(args):
     return 0
 
 def cmd_serve(args):
-    import os, secrets
+    import os
     from . import server
     cfg = server.load_config(args.config)
-    token = args.token
-    if args.token_file:
-        with open(os.path.expanduser(args.token_file)) as fh:
-            token = fh.read().strip()
-    ac_cfg = cfg.get("access", {})
-    verifier = None
-    if ac_cfg.get("team_domain") and ac_cfg.get("aud"):
-        from . import access as access_mod
-        verifier = access_mod.Verifier(ac_cfg["team_domain"], ac_cfg["aud"], ac_cfg.get("allowed_emails"))
-        print(f"requests through Cloudflare need a valid Access login for {ac_cfg['team_domain']} (no token needed)")
-    if args.host not in ("127.0.0.1", "localhost", "::1") and not token and not args.trust_lan and not verifier:
-        token = secrets.token_urlsafe(12)
-        print(f"no --token given for a network address: made one for this run: {token}")
     from . import printer as printer_mod
     pc = printer_mod.load_printer(args.printer)
     pr = printer_mod.Printer(pc) if pc else None
@@ -168,11 +155,8 @@ def cmd_serve(args):
         print(f"assistant on: {' '.join(cmd)} (model {asst.model}, at most ${asst.budget} per message)")
     else:
         print("assistant off (no claude command found or disabled in config)")
-    srv = server.make_server(cfg, args.host, args.port, token, pr, asst, cfg.get("render_command"), args.trust_lan, verifier)
-    if args.trust_lan:
-        print("home-network devices need no token (requests through a proxy still do)")
-    q = f"?t={token}" if token else ""
-    print(f"Fit2Print is at http://{'localhost' if args.host in ('127.0.0.1', 'localhost') else args.host}:{args.port}/{q}   (Ctrl+C to stop)")
+    srv = server.make_server(cfg, args.host, args.port, pr, asst, cfg.get("render_command"))
+    print(f"Fit2Print is at http://{'localhost' if args.host in ('127.0.0.1', 'localhost') else args.host}:{args.port}/   (Ctrl+C to stop)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
@@ -407,7 +391,7 @@ def main(argv=None):
     i.set_defaults(fn=cmd_init)
     sv = s.add_parser("serve", help="the front door: a local web app (Home, project, log a print, new project)")
     sv.add_argument("--config", default=None, help="default ~/.config/fit2print/config.toml"); sv.add_argument("--host", default="127.0.0.1")
-    sv.add_argument("--printer", default=None, help="printer file, default ~/.config/fit2print/printer.toml"); sv.add_argument("--port", type=int, default=8750); sv.add_argument("--token", default=None, help="required for any address except localhost"); sv.add_argument("--trust-lan", action="store_true", help="devices on the home network (private addresses) need no token, unless the request came through a proxy such as a Cloudflare tunnel"); sv.add_argument("--token-file", default=None, help="read the token from this file (keeps it off the command line)")
+    sv.add_argument("--printer", default=None, help="printer file, default ~/.config/fit2print/printer.toml"); sv.add_argument("--port", type=int, default=8750)
     sv.set_defaults(fn=cmd_serve)
     sy = s.add_parser("sync", help="keep the server's copy of a project in step with this master copy (pull its new log entries and photos, push the state)")
     sy.add_argument("project"); sy.add_argument("remote", help="folder, or host:folder over ssh"); sy.add_argument("--dry-run", action="store_true"); sy.add_argument("--prefer", choices=["local", "server"], help="settle a both-sides-changed conflict this way")

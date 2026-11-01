@@ -65,23 +65,37 @@ class Front(unittest.TestCase):
         s, _, _ = self.req("POST", "/new", data, {"Content-Type": "application/x-www-form-urlencoded", "Content-Length": str(len(data))})
         self.assertEqual(s, 400)
 
-class Access(unittest.TestCase):
-    def test_a_network_address_needs_a_token(self):    # NEGATIVE CONTROL: the page can add files, so it must not be open on the network
-        with self.assertRaises(SystemExit):
-            server.make_server(dict(projects=[], new_projects_dir="/tmp/none"), "0.0.0.0", 0)
-    def test_token_is_required_and_then_remembered(self):
-        with tempfile.TemporaryDirectory() as d:
-            srv = server.make_server(dict(projects=[], new_projects_dir=d), "127.0.0.1", 0, token="s3cret")
-            port = srv.server_address[1]; threading.Thread(target=srv.serve_forever, daemon=True).start()
-            def get(path, headers=None):
-                c = http.client.HTTPConnection("127.0.0.1", port, timeout=10); c.request("GET", path, headers=headers or {}); r = c.getresponse(); r.read(); return r
-            self.assertEqual(get("/").status, 401)
-            r = get("/?t=s3cret"); self.assertEqual(r.status, 200)
-            self.assertEqual(get("/", {"Cookie": "f2p=s3cret"}).status, 200)
-            self.assertEqual(get("/", {"Cookie": "f2p=wrong"}).status, 401)
-            srv.shutdown(); srv.server_close()
+class PlainWebsite(unittest.TestCase):
+    """The page is JUST a website: no token, no login, no knowledge of any proxy. Whatever sits in front of it is someone else's job."""
+    def serve(self, host="127.0.0.1"):
+        d = tempfile.mkdtemp(); srv = server.make_server(dict(projects=[], new_projects_dir=d), host, 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start(); self.addCleanup(lambda: (srv.shutdown(), srv.server_close()))
+        return srv.server_address[1]
+    def status(self, port, path="/", headers=None, method="GET"):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10); c.request(method, path, headers=headers or {}); r = c.getresponse(); r.read(); return r.status
+    def test_a_plain_request_is_served_with_no_token_or_cookie(self):
+        self.assertEqual(self.status(self.serve()), 200)
+    def test_a_network_address_is_allowed_and_asks_for_nothing(self):
+        self.assertEqual(self.status(self.serve("0.0.0.0")), 200)
+    def test_requests_that_came_through_a_tunnel_or_proxy_are_served_like_any_other(self):
+        p = self.serve()
+        for h in ("Cf-Ray", "Cf-Connecting-Ip", "Cf-Access-Jwt-Assertion", "X-Forwarded-For", "Forwarded", "Cdn-Loop", "X-Real-Ip"):
+            self.assertEqual(self.status(p, headers={h: "203.0.113.9"}), 200, h)
+    def test_the_app_never_asks_for_a_token(self):                                   # NEGATIVE CONTROL: the owner asked for this to be gone, and it must stay gone
+        import inspect
+        src = inspect.getsource(server)
+        for word in ("token", "Cloudflare", "CF_Authorization", "Access-Jwt", "trust_lan", "locked"):
+            self.assertNotIn(word, src.replace("token_note", ""), word)
+        self.assertEqual(self.status(self.serve(), "/?t=whatever"), 200)
+        for flag in ("--token", "--trust-lan", "--token-file"):
+            r = __import__("subprocess").run([__import__("sys").executable, "-m", "fit2print", "serve", flag, "x", "--port", "0"], capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=os.path.join(os.path.dirname(__file__), "..", "src")), timeout=30)
+            self.assertNotEqual(r.returncode, 0); self.assertIn("unrecognized arguments", r.stderr)
+    def test_posting_needs_nothing_either(self):
+        p = self.serve()
+        c = http.client.HTTPConnection("127.0.0.1", p, timeout=10); body = "name=Plain+Site+Test&kind=design-and-print"
+        c.request("POST", "/new", body=body, headers={"Content-Type": "application/x-www-form-urlencoded", "Content-Length": str(len(body))}); r = c.getresponse(); r.read()
+        self.assertEqual(r.status, 303)
 
-class PrinterPanel(unittest.TestCase):
     def test_home_shows_the_printer_and_links_the_job_to_its_project(self):
         from fit2print import printer
         with tempfile.TemporaryDirectory() as d:
@@ -90,7 +104,7 @@ class PrinterPanel(unittest.TestCase):
                 f.write(json.dumps(dict(date="2026-10-30", plate="base", result="ok", what="x")) + "\n")
             pr = printer.Printer(dict(host="x", serial="s", access_code="SECRETCODE"))
             pr.last = dict(state="printing", job="base", percent=54, layer=311, layers=579, minutes_left=160, nozzle=220, bed=65, errors=False, at=__import__("time").time())
-            srv = server.make_server(dict(projects=[os.path.join(d, "p1")], new_projects_dir=os.path.join(d, "n")), "127.0.0.1", 0, None, pr)
+            srv = server.make_server(dict(projects=[os.path.join(d, "p1")], new_projects_dir=os.path.join(d, "n")), "127.0.0.1", 0, pr)
             port = srv.server_address[1]; threading.Thread(target=srv.serve_forever, daemon=True).start()
             c = http.client.HTTPConnection("127.0.0.1", port, timeout=10); c.request("GET", "/"); r = c.getresponse(); t = r.read().decode()
             self.assertIn("54 %", t); self.assertIn("layer 311 of 579", t); self.assertIn("2 h 40 min", t); self.assertIn("220 &deg;C / 65 &deg;C", t); self.assertIn("/p/test-bracket", t)
@@ -100,7 +114,7 @@ class PrinterPanel(unittest.TestCase):
         from fit2print import printer
         with tempfile.TemporaryDirectory() as d:
             pr = printer.Printer(dict(host="x", serial="s", access_code="c")); pr.last = dict(state="offline", error="can not reach the printer (OSError)", at=1)
-            srv = server.make_server(dict(projects=[], new_projects_dir=d), "127.0.0.1", 0, None, pr)
+            srv = server.make_server(dict(projects=[], new_projects_dir=d), "127.0.0.1", 0, pr)
             port = srv.server_address[1]; threading.Thread(target=srv.serve_forever, daemon=True).start()
             c = http.client.HTTPConnection("127.0.0.1", port, timeout=10); c.request("GET", "/"); r = c.getresponse(); t = r.read().decode()
             self.assertEqual(r.status, 200); self.assertIn("can not reach the printer", t)
@@ -118,7 +132,7 @@ class AssistantPanel(unittest.TestCase):
         from fit2print import assistant
         self.d = tempfile.TemporaryDirectory(); project.init(os.path.join(self.d.name, "p1"), "Chat Test")
         self.a = assistant.Assistant(command=self.FAKE, f2p="fit2print")
-        self.srv = server.make_server(dict(projects=[os.path.join(self.d.name, "p1")], new_projects_dir=os.path.join(self.d.name, "n")), "127.0.0.1", 0, None, None, self.a)
+        self.srv = server.make_server(dict(projects=[os.path.join(self.d.name, "p1")], new_projects_dir=os.path.join(self.d.name, "n")), "127.0.0.1", 0, None, self.a)
         self.port = self.srv.server_address[1]; threading.Thread(target=self.srv.serve_forever, daemon=True).start()
     def tearDown(self): self.srv.shutdown(); self.srv.server_close(); self.d.cleanup()
     def call(self, method, path, body=None, headers=None):
@@ -151,25 +165,6 @@ class AssistantPanel(unittest.TestCase):
         data = urllib.parse.urlencode(dict(name="Pico Case", desc="snap fit")).encode()
         s, _ = self.call("POST", "/new", data, {"Content-Type": "application/x-www-form-urlencoded", "Content-Length": str(len(data))})
         self.assertEqual(s, 303)
-
-class TrustLan(unittest.TestCase):
-    def serve(self, trust):
-        d = tempfile.mkdtemp(); srv = server.make_server(dict(projects=[], new_projects_dir=d), "127.0.0.1", 0, token="s3cret", trust_lan=trust)
-        threading.Thread(target=srv.serve_forever, daemon=True).start(); self.addCleanup(lambda: (srv.shutdown(), srv.server_close()))
-        return srv.server_address[1]
-    def status(self, port, headers=None):
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10); c.request("GET", "/", headers=headers or {}); r = c.getresponse(); r.read(); return r.status
-    def test_a_device_on_the_home_network_needs_no_token_when_trusted(self):
-        self.assertEqual(self.status(self.serve(True)), 200)
-    def test_without_the_option_the_token_is_still_required(self):
-        self.assertEqual(self.status(self.serve(False)), 401)
-    def test_anything_through_the_cloudflare_tunnel_still_needs_the_token(self):     # NEGATIVE CONTROL: the tunnel reaches us from this machine
-        p = self.serve(True)
-        for h in ("Cf-Ray", "Cf-Connecting-Ip", "Cf-Access-Jwt-Assertion", "X-Forwarded-For", "Forwarded", "Cdn-Loop"):
-            self.assertEqual(self.status(p, {h: "1.2.3.4"}), 401, h)
-    def test_a_proxied_request_with_the_token_works(self):
-        p = self.serve(True)
-        c = http.client.HTTPConnection("127.0.0.1", p, timeout=10); c.request("GET", "/?t=s3cret", headers={"Cf-Ray": "x"}); r = c.getresponse(); r.read(); self.assertEqual(r.status, 200)
 
 class GuidePage(unittest.TestCase):
     def setUp(self):

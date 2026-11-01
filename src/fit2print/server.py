@@ -1,10 +1,10 @@
 """The front door: a small local web app (standard library only). `fit2print serve` opens Home (your projects), a project's dashboard,
 Log a print (with a photo), and New project. Every project is a folder with a fit2print.toml marker; the page never guesses.
 
-Safety: it listens on 127.0.0.1 only unless you pass --host, and any other address REQUIRES --token (sent as ?t=TOKEN once, then a cookie).
+Access: it is a plain website with no login of its own. It listens on 127.0.0.1 only unless you pass --host; anything in front of it (a tunnel, a login, a firewall) is that thing's job.
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
-import datetime, ipaddress, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, secrets, socketserver, urllib.parse
-from . import archive as archive_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, componentview, render as render_mod, printer as printer_mod, project
+import datetime, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, socketserver, urllib.parse
+from . import archive as archive_mod, checkview, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, componentview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -33,9 +33,9 @@ a{color:var(--brand)}label{display:block;font-weight:600;margin:14px 0 4px}.note
 .flash{background:#e6f4ea;border:1px solid #b7dfc2;border-radius:10px;padding:8px 12px;margin-bottom:14px}@media (prefers-color-scheme:dark){.flash{background:#1d2e23;border-color:#2f5a3c}}
 """
 
-def page(title, body, token_note=""):
+def page(title, body):
     return (f"<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>{esc(title)}</title><style>{CSS}</style></head><body>"
-            f"<header><div class=logo><a href='/'>Fit<b>2</b>Print</a></div><div class=small><a href='/hardware'>Components</a> {token_note}</div></header><div class=wrap>{body}</div></body></html>")
+            f"<header><div class=logo><a href='/'>Fit<b>2</b>Print</a></div><div class=small><a href='/hardware'>Components</a></div></header><div class=wrap>{body}</div></body></html>")
 
 def assistant_card(pid, folder, name, a, start=False, desc=""):
     """The assistant panel for a project page: past messages, a box, and a few lines of script that send a message and poll for the answer."""
@@ -284,7 +284,6 @@ def load_config(path=None):
         cfg["new_projects_dir"] = os.path.expanduser(d.get("new_projects_dir", cfg["new_projects_dir"]))
         cfg["assistant"] = d.get("assistant", {})
         cfg["render_command"] = d.get("render", {}).get("command")
-        cfg["access"] = d.get("access", {})
     return cfg
 
 def read_marker(folder):
@@ -480,9 +479,7 @@ def save_print(folder, marker, fields, files):
     return entry
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    trust_lan = False; access = None
-    PROXY_HEADERS = ("Cf-Ray", "Cf-Connecting-Ip", "Cf-Visitor", "Cf-Access-Jwt-Assertion", "Cdn-Loop", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip", "Forwarded", "True-Client-Ip")
-    app = None; token = None; printer = None; assistant = None; render_command = None; plates = layerview.Cache()
+    app = None; printer = None; assistant = None; render_command = None; plates = layerview.Cache()
     def log_message(self, *a): pass
     def _send(self, code, body, ctype="text/html; charset=utf-8", headers=()):
         b = body.encode() if isinstance(body, str) else body
@@ -494,37 +491,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(303); self.send_header("Location", to)
         for k, v in headers: self.send_header(k, v)
         self.end_headers()
-    def _proxied(self):
-        return any(self.headers.get(h) for h in self.PROXY_HEADERS)
-    def _client_ip(self):
-        try:
-            ip = ipaddress.ip_address(self.client_address[0].split("%")[0])
-            if getattr(ip, "ipv4_mapped", None):
-                ip = ip.ipv4_mapped
-            return ip
-        except ValueError:
-            return None
-    def _auth(self, qs):
-        """Who may in. 1) a device on the home network, straight (no proxy marks), when --trust-lan: always. 2) a request carrying proxy marks (the Cloudflare tunnel
-        reaches us from this very machine): only with a valid Cloudflare Access login proof, or, if Access is not configured, the token. 3) anything else: the
-        token if there is one; with no token only the machine's own localhost (development). A public address reaching us directly is never let in without the token."""
-        proxied, ip = self._proxied(), self._client_ip()
-        private = ip is not None and (ip.is_private or ip.is_loopback)
-        if self.trust_lan and not proxied and private:
-            return True, ()
-        if proxied and self.access:
-            cookie = self.headers.get("Cookie", "")
-            m = re.search(r"(?:^|;\s*)CF_Authorization=([A-Za-z0-9._-]+)", cookie)
-            tok = self.headers.get("Cf-Access-Jwt-Assertion") or (m.group(1) if m else "")
-            return (bool(tok) and self.access.check(tok)[0]), ()
-        if self.token:
-            cookie = self.headers.get("Cookie", "")
-            if re.search(r"(?:^|;\s*)f2p=" + re.escape(self.token) + r"(?:;|$)", cookie):
-                return True, ()
-            if qs.get("t", [""])[0] == self.token:
-                return True, (("Set-Cookie", f"f2p={self.token}; HttpOnly; SameSite=Strict; Path=/"),)
-            return False, ()
-        return (not proxied and ip is not None and ip.is_loopback), ()
     def _first_desc(self, folder):
         try:
             with open(os.path.join(folder, "brief.md")) as fh:
@@ -535,9 +501,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return ""
     def do_GET(self):
         u = urllib.parse.urlparse(self.path); qs = urllib.parse.parse_qs(u.query)
-        ok, hdr = self._auth(qs)
-        if not ok:
-            return self._send(401, page("Fit2Print", "<div class=card><h3>Locked</h3>Open the link with its token.</div>"))
+        hdr = ()
         path = u.path
         try:
             if path == "/health": return self._send(200, "ok", "text/plain")
@@ -636,14 +600,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 doc = dashboard.render(data)
                 bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><span><a class=btn href='/p/{pid}/log'>Log a print</a> {archive_button(pid, folder, mk)}</span></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
-                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + modelview.card(pid, folder) + components_card(mk) + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
+                return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + modelview.card(pid, folder) + components_card(mk) + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + checkview.card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
         except Exception as e:
             return self._send(500, page("Error", f"<div class=card><h3>Something went wrong</h3><div class=meta>{esc(e)}</div></div>"))
     def do_POST(self):
         u = urllib.parse.urlparse(self.path); qs = urllib.parse.parse_qs(u.query)
-        ok, hdr = self._auth(qs)
-        if not ok: return self._send(401, "locked", "text/plain")
+        hdr = ()
         n = int(self.headers.get("Content-Length", "0"))
         if n > MAX_UPLOAD + 100000: return self._send(413, page("Too big", "<div class=card>That upload is too large.</div>"))
         body = self.rfile.read(n)
@@ -728,8 +691,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
-def make_server(cfg, host="127.0.0.1", port=8750, token=None, printer=None, assistant=None, render_command=None, trust_lan=False, access=None):
-    if host not in ("127.0.0.1", "localhost", "::1") and not token and not trust_lan and not access:
-        raise SystemExit("listening on a network address needs --token, or --trust-lan (home network only), or a Cloudflare Access setting (the page can add files to your projects)")
-    Handler.app = App(cfg); Handler.token = token; Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command; Handler.trust_lan = trust_lan; Handler.access = access
+def make_server(cfg, host="127.0.0.1", port=8750, printer=None, assistant=None, render_command=None):
+    Handler.app = App(cfg); Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command
     return Server((host, port), Handler)

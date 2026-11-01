@@ -41,7 +41,7 @@ Everything else is still in the Phonosphere repo (`cad/`) and is listed, with it
 * **Renders** (`fit2print render PROJECT`, and "What it should look like" on the project page): pictures of each part as it will sit on the bed, assembled and pulled apart, drawn from the project's own model. The views are the marker's `[[render]]` tables.
 
 ## On a server, and from a phone
-See [docs/DEPLOY.md](docs/DEPLOY.md): the container on phobos (bound to localhost only), `fit2print sync` to keep it in step with the laptop's master copy, and the steps for a Cloudflare Zero Trust tunnel + Access policy.
+See [docs/DEPLOY.md](docs/DEPLOY.md): the container on phobos (bound to localhost only), `fit2print sync` to keep it in step with the laptop's master copy, and how to reach it (it is a plain website: put whatever tunnel or login you like in front).
 
 ## Run it in a container
 See [docs/DOCKER.md](docs/DOCKER.md): a 2.6 GB image with pinned OpenSCAD and Bambu Studio; tested on a home server with identical results to the laptop.
@@ -60,7 +60,7 @@ One self-contained page: what needs you, a board of every part by state (not che
 
 ## The front door
     fit2print serve                      # http://localhost:8750 , the projects listed in ~/.config/fit2print/config.toml
-    fit2print serve --host 0.0.0.0       # on the network (a phone on your wifi): needs a token, made for you if you give none
+    fit2print serve --host 0.0.0.0       # on the network (a phone on your wifi): a plain website, no login; control who can reach it yourself
 Home (your projects, with what needs you), a project's dashboard, **Log a print** (a few words, a result, a photo) and **New project**. Standard library only. The **printer panel** shows the printer's live status and camera and links the running job to its project: it reads `~/.config/fit2print/printer.toml` (`[printer]` host, serial, access_code; keep it readable by you only). It is read-only: it listens to the printer's own report and asks it to repeat its status; it never sends a command that moves, heats or stops anything. The assistant panel is not connected yet. See [docs/mockups](docs/mockups/).
 
 - `fit2print plate --split NAME_split.json --out DIR` slices every section and the pin plate from a split, judges each, and fails if any is blocked. It refuses a failed, incomplete or stale split.
@@ -72,3 +72,4 @@ Home (your projects, with what needs you), a project's dashboard, **Log a print*
 
 - checks.toml also takes `[[probe]]` (a combination that must be empty, or `must_overlap` as a control), `[[driver]]` (a straight rod for a driver must meet no plastic) and `[[ring]]` (the plastic round a hole must be mostly solid), each with controls that must fire.
 - `fit2print selftest PROJECT [--all] [--strict]` runs the checks on plates whose outcome is known (selftest.toml) and fails if they disagree; `assembly-check` and `selftest` append to records/checks.jsonl.
+- The project page has a read-only Checks card: the last run of assembly-check and selftest (marked STALE when the model changed since), and each split's summary, joints and warnings.
