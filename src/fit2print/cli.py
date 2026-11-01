@@ -271,7 +271,7 @@ def cmd_export(args):
         print(f"cannot export: {e}"); return 1
     for r in res:
         if r["ok"]:
-            print(f"ok    {r['name']}: stl/{r['name']}.stl  {r['size'][0]} x {r['size'][1]} x {r['size'][2]} mm, {r['volume']} cm3" + ("" if r["watertight"] else "  WARNING: not watertight"))
+            print(f"ok    {r['name']}: {os.path.relpath(r['file'], args.project)}  {r['size'][0]} x {r['size'][1]} x {r['size'][2]} mm, {r['volume']} cm3" + ("" if r["watertight"] else "  WARNING: not watertight"))
         else:
             print(f"FAIL  {r['name']}: {r['error']}"); bad = 1
     return bad
@@ -304,7 +304,7 @@ def cmd_split(args):
         for tb in tables:
             if not split_mod.NAME.fullmatch(str(tb.get("name", ""))) or not tb.get("part"):
                 print(f"a [[split]] needs a name (lower-case letters, digits, - or _) and the part's STL name: {tb}"); bad = 1; continue
-            stl = os.path.join(args.stl, "stl", tb["part"] + ".stl")
+            stl = os.path.join(args.stl, export_mod.stl_dir(marker), tb["part"] + ".stl")
             if not os.path.exists(stl):
                 print(f"FAIL  {tb['name']}: {stl} is missing: run `fit2print export .` first"); bad = 1; continue
             model = marker.get("model")

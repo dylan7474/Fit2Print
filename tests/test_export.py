@@ -97,3 +97,21 @@ trimesh.util.concatenate([base, nub]).export(out)
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExportStlDir(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory(); self.f = os.path.join(self.d.name, "p"); project.init(self.f, "Dir Test")
+        open(os.path.join(self.f, "model.scad"), "w").write("cube(1);")
+        self.fake = os.path.join(self.d.name, "openscad"); open(self.fake, "w").write(FAKE.format(py=sys.executable)); os.chmod(self.fake, 0o755)
+    def tearDown(self): self.d.cleanup()
+    def test_stl_dir_moves_the_output_and_leaves_the_old_folder_alone(self):
+        os.makedirs(os.path.join(self.f, "stl")); open(os.path.join(self.f, "stl", "body.stl"), "w").write("keep me")
+        r = export.export(self.f, dict(model="model.scad", stl_dir="stl/full", export=[dict(name="body", part="body")]), [self.fake])
+        self.assertTrue(r[0]["ok"]); self.assertTrue(r[0]["file"].endswith(os.path.join("stl", "full", "body.stl")))
+        self.assertEqual(open(os.path.join(self.f, "stl", "body.stl")).read(), "keep me")
+    def test_stl_dir_outside_the_project_is_refused(self):                 # NEGATIVE CONTROL
+        for bad in ("../x", "/tmp/x", ""):
+            with self.assertRaises(ValueError):
+                export.export(self.f, dict(model="model.scad", stl_dir=bad, export=[dict(name="body", part="body")]), [self.fake])
+

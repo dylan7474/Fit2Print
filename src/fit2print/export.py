@@ -14,17 +14,24 @@ import numpy as np
 import trimesh
 
 ORIENTS = ("flip_x", "flip_y")
-NAME = re.compile(r"[a-z0-9_-]{1,40}")
+NAME = re.compile(r"[A-Za-z0-9_-]{1,40}")
 COLOUR = re.compile(r"#[0-9a-fA-F]{6}")
+
+def stl_dir(marker):
+    """The folder (inside the project) the printable STLs live in: `stl_dir = "stl/full"` in the marker, default "stl"."""
+    d = marker.get("stl_dir", "stl")
+    if not isinstance(d, str) or not d or os.path.isabs(d) or ".." in d.replace("\\", "/").split("/"):
+        raise ValueError(f"stl_dir must be a folder inside the project (got {d!r})")
+    return d.strip("/")
 
 def pieces(marker):
     out = []
     for e in marker.get("export") or []:
         if not NAME.fullmatch(str(e.get("name", ""))):
-            raise ValueError(f"an [[export]] needs a name of lower-case letters, digits, - or _ (got {e.get('name')!r})")
+            raise ValueError(f"an [[export]] needs a name of letters, digits, - or _ (got {e.get('name')!r})")
         g, c = e.get("group"), e.get("colour")
         if g is not None and not NAME.fullmatch(str(g)):
-            raise ValueError(f"the group of [[export]] {e['name']} needs lower-case letters, digits, - or _ (got {g!r})")
+            raise ValueError(f"the group of [[export]] {e['name']} needs letters, digits, - or _ (got {g!r})")
         if c is not None and not COLOUR.fullmatch(str(c)):
             raise ValueError(f"the colour of [[export]] {e['name']} must look like #1A1A1A (got {c!r})")
         o = e.get("orient")
@@ -53,10 +60,11 @@ def export(folder, marker, command=None, timeout=300):
     cmd = command or [shutil.which("openscad") or "openscad"]
     from . import render as _render
     _render._hardware_scad(folder, marker)
-    os.makedirs(os.path.join(folder, "stl"), exist_ok=True)
+    sd = stl_dir(marker)
+    os.makedirs(os.path.join(folder, sd), exist_ok=True)
     drawn, res = {}, {}
     for p in ps:
-        tmp = os.path.join(folder, "stl", p["name"] + ".part.stl")
+        tmp = os.path.join(folder, sd, p["name"] + ".part.stl")
         try:
             r = subprocess.run(cmd + ["-q", "--backend=manifold", "-D", f'part="{p["part"]}"', "-o", tmp, os.path.join(folder, model)], capture_output=True, text=True, timeout=timeout, cwd=folder)
             if r.returncode != 0 or not os.path.exists(tmp) or os.path.getsize(tmp) < 200:
@@ -89,7 +97,7 @@ def export(folder, marker, command=None, timeout=300):
         shift = [-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2]]               # flat on the bed, centred (the group as one)
         for n in names:
             m = drawn[n]; m.apply_translation(shift)
-            out = os.path.join(folder, "stl", n + ".stl"); m.export(out)
+            out = os.path.join(folder, sd, n + ".stl"); m.export(out)
             a, b = m.bounds
             res[n] = dict(name=n, ok=True, error="", file=out, size=[round(float(x), 2) for x in (b - a)], volume=round(float(m.volume) / 1000, 3), watertight=bool(m.is_watertight))
     return [res[p["name"]] for p in ps]

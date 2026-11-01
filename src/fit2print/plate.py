@@ -111,9 +111,9 @@ def make_group(folder, marker, group, outdir, cfg=None, profiles=PROFILES):
     src = [os.path.join(folder, marker["model"])] if isinstance(marker.get("model"), str) else None
     stls = []
     for p in ps:
-        f = os.path.join(folder, "stl", p["name"] + ".stl")
+        f = os.path.join(folder, export_mod.stl_dir(marker), p["name"] + ".stl")
         if not os.path.exists(f):
-            raise SystemExit(f"REFUSED: stl/{p['name']}.stl is missing (run the export first)")
+            raise SystemExit(f"REFUSED: {os.path.relpath(f, folder)} is missing (run the export first)")
         stale = check_fresh(f, src)
         if stale:
             raise SystemExit("REFUSED: " + stale)
