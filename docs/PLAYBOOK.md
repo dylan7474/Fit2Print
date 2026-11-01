@@ -77,3 +77,23 @@ Level 1 works today. Levels 2 to 4 are later and only if they earn it.
 
 ## 6. Definition of done for a project
 Every part has a PASS (or a person-decided CHECK) on the current design; every risky feature has a coupon result; every real print has a photo and an outcome in the log; the build order passes; and `NEXT.md` says "finished" or what is left.
+
+## 7. The commands, in the order a project uses them
+Each is one command on its own; every one prints what it did and never waives a check. (`fit2print --help` lists them all.)
+| When | Command | What it gives you |
+|---|---|---|
+| Model | `fit2print render .` | the pictures of the model |
+| Model | `fit2print export .` | one STL per `[[export]]` piece (`orient` turns a piece over; `stl_dir` says where they go) |
+| Model | `fit2print split .` | a piece bigger than the bed cut into sections with pin or interlocking-teeth joints (`[[split]]` tables) |
+| Checks | `fit2print overhang stl/NAME.stl` | plastic with nothing under it, on the STL |
+| Checks | `fit2print assembly-check .` | the virtual build from `checks.toml`: parts slide into place, screws bite, holes stay open, with controls that must fire |
+| Checks | `fit2print selftest .` | does the checker still flag the failures it should? (`selftest.toml`; `--all` includes the slow ones) |
+| Checks | `fit2print register .` | every part in one table: what it is, latest check, stale STL, what really printed (`parts.toml`) |
+| Plate | `fit2print plate stl/NAME.stl --project . --out plates --report` | slice, paint supports under shelves, judge the toolpaths, compare with the design, and a one-page report with a picture of every flagged spot |
+| Plate | `fit2print plate --split sections/NAME_split.json ...` | every section of a split part and its pins |
+| Plate | `fit2print plate A.stl B.stl --together --name N ...` | several parts on one plate, each checked on its own |
+| Plate | `fit2print coupon stl/NAME.stl --out coupons --box NAME X0 X1 Y0 Y1` | a small piece cut from the real STL, to try one doubtful spot |
+| Plate | `fit2print calibrate card` / `calibrate record` | print one card, measure it, get a profile for this printer and filament |
+| Plate | `fit2print gate .` | the ONE verdict for the whole project: export, every plate, the virtual build, the self-test and the register. A CHECK is never a pass |
+| Print | `fit2print register .` (after logging each print) | what has really been printed, against what the checks said |
+A project uses only the files it needs: `checks.toml` (assembly cases), `selftest.toml` (known plates), `parts.toml` (the register), `[[split]]` tables. The assistant is told these commands in each stage and may not run anything else.

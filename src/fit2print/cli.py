@@ -337,6 +337,18 @@ def cmd_calibrate(args):
         print(f"cannot calibrate: {e}"); return 1
     return 0
 
+def cmd_gate(args):
+    from . import gate
+    marker = read_marker(args.project)
+    if not marker.get("model") or not marker.get("export"):
+        print("the project's marker needs model = \"file.scad\" and at least one [[export]] table"); return 1
+    parts = [x for x in (args.parts or "").split(",") if x.strip()]
+    try:
+        r = gate.run(args.project, marker, parts or None, not args.no_export, not args.no_plates, not args.fresh, args.all_selftest, args.profile)
+    except (ValueError, OSError) as e:
+        print(f"cannot run the gate: {e}"); return 1
+    return 1 if r["verdict"] == "BLOCK" or (args.strict and r["verdict"] == "CHECK") else 0
+
 def cmd_register(args):
     from . import register
     marker = read_marker(args.project)
@@ -494,6 +506,11 @@ def main(argv=None):
     cb.add_argument("--holes"); cb.add_argument("--outer"); cb.add_argument("--pin", choices=["ok", "tight", "loose"])
     cb.add_argument("--bridge-ok", type=float); cb.add_argument("--shelf-ok", type=float); cb.add_argument("--wall-ok", type=float); cb.add_argument("--lean-ok", type=float); cb.add_argument("--flow", type=float)
     cb.set_defaults(fn=cmd_calibrate)
+    gt = s.add_parser("gate", help="is the whole project fit to print? export, every plate check, the virtual build, the self-test and the register, one verdict (a CHECK is never a pass)")
+    gt.add_argument("project"); gt.add_argument("--parts", default=None, help="only these pieces (comma separated)"); gt.add_argument("--no-export", action="store_true", help="do not re-draw the STLs: check they exist and are current")
+    gt.add_argument("--no-plates", action="store_true", help="skip slicing (the other steps still run)"); gt.add_argument("--fresh", action="store_true", help="re-slice every piece even if its STL has not changed since its last plate check")
+    gt.add_argument("--all-selftest", action="store_true", help="include the slow self-test fixtures"); gt.add_argument("--profile", default=None); gt.add_argument("--strict", action="store_true", help="exit 1 on a CHECK too")
+    gt.set_defaults(fn=cmd_gate)
     rg = s.add_parser("register", help="every part of the project in one table: what it is, its latest plate check, whether its STL is stale, what really happened on the printer (parts.toml)")
     rg.add_argument("project"); rg.add_argument("--out", default=None, help="default PARTS_REGISTER.md in the project"); rg.add_argument("--strict", action="store_true", help="exit 1 if anything is unregistered, not exported, stale or never checked")
     rg.set_defaults(fn=cmd_register)
