@@ -87,3 +87,52 @@ def test_a_container_closing_round_its_content_is_tested_by_the_content_growing(
     sweep = '[[sweep]]\nname = "box over block"\nmove = ["box"]\nfixed = ["block"]\ndirection = [0, 0, -1]\ntravel = 10\nstep = 2\n'
     r, out = run(parts + sweep)
     assert r["ok"], out
+
+
+# ---- probes, driver runs, rings -----------------------------------------------------------------
+DRIVER = '[[driver]]\nname = "plate screw"\nparts = ["plate"]\nradius = 1.5\nlength = 25\ndir = [0, 0, -1]\nat = [[0, 0, 30]]\n'
+RING = '[[ring]]\nname = "plate hole"\npart = "plate"\nr_out = 5\nr_in = 1.7\ndepth = 8\ndir = [0, 0, -1]\nat = [[0, 0, 9]]\n'
+PROBE_PRELUDE = 'prelude = \'part = "none"; module plate() difference() { translate([-20,-20,0]) cube([40,40,10]); translate([0,0,-1]) cylinder(d=3.4,h=12,$fn=32); } module block() translate([-20,-20,-20]) cube([40,40,20]);\'\n'
+
+
+def test_a_clear_driver_run_and_a_solid_ring_pass_with_their_controls():
+    r, out = run(DRIVER + RING)
+    assert r["ok"], out
+    assert "driver run clear" in out and "plastic round the hole 100 %" in out or "plastic round the hole 9" in out
+    assert out.count("control:") == 2
+
+
+def test_a_driver_run_into_plastic_fails_and_a_marked_control_case_passes():      # NEGATIVE CONTROL
+    r, out = run(DRIVER.replace("at = [[0, 0, 30]]", "at = [[0, 0, 30], [10, 0, 30]]"))
+    assert not r["ok"] and "plate screw 2: driver run BLOCKED" in out
+    r2, out2 = run(DRIVER.replace("at = [[0, 0, 30]]", "at = [[10, 0, 30]]") + "must_fail = true\n")
+    assert r2["ok"] and "expected: this is a control" in out2
+
+
+def test_a_ring_half_off_the_edge_fails_the_plastic_rule():                       # NEGATIVE CONTROL
+    r, out = run(RING.replace("at = [[0, 0, 9]]", "at = [[0, 0, 9], [19, 0, 9]]"))
+    assert not r["ok"] and "plate hole 2" in out and "needs 80 %" in out
+
+
+def test_probes_must_be_empty_and_a_must_overlap_control_must_overlap():
+    empty = PROBE_PRELUDE + '[[probe]]\nname = "plate sits on block"\nsnippet = "intersection() { plate(); block(); }"\n'
+    r, out = run(empty)
+    assert r["ok"], out
+    bad = PROBE_PRELUDE + '[[probe]]\nname = "plate and a shifted block"\nsnippet = "intersection() { plate(); translate([0,0,5]) block(); }"\n'
+    r2, out2 = run(bad)
+    assert not r2["ok"] and "FAIL  plate and a shifted block" in out2
+    ctl = PROBE_PRELUDE + '[[probe]]\nname = "block pushed into plate"\nmust_overlap = true\nsnippet = "intersection() { plate(); translate([0,0,5]) block(); }"\n'
+    r3, out3 = run(ctl)
+    assert r3["ok"], out3
+    blind = PROBE_PRELUDE + '[[probe]]\nname = "no overlap anywhere"\nmust_overlap = true\nsnippet = "intersection() { plate(); block(); }"\n'
+    r4, out4 = run(blind)
+    assert not r4["ok"] and "cannot see a collision" in out4
+
+
+def test_bad_driver_ring_probe_tables_are_explained():
+    for bad, msg in (('[[driver]]\nname="x"\n', "needs parts"), ('[[ring]]\nname="x"\n', "needs part"), ('[[probe]]\nname="x"\n', "snippet or a part"),
+                     ('[[ring]]\nname="x"\npart="p"\nr_out=1\nr_in=2\ndepth=1\ndir=[0,0,1]\nat=[[0,0,0]]\n', "r_in < r_out")):
+        with tempfile.TemporaryDirectory() as t:
+            f = make(t, bad)
+            with pytest.raises(ValueError, match=msg):
+                assemblycheck.load_cases(f)

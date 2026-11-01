@@ -28,6 +28,30 @@ one of the model's `part` values (when the model draws that part where it goes i
     at  = [[x, y, z], ...]         # where each screw's head sits
     dir = [0, -1, 0]               # the way the screws go in
 
+    [[probe]]                      # a combination that must be EMPTY (a part against the cabinet, a clearance volume, a hole that must stay open)
+    name = "speaker clears the pod"
+    snippet = "intersection() { speaker(); pod(); }"     # or: part = "speaker_clash" (a model part value) and define = { chk_i = 3 }
+    allow = 1.0                    # mm3 accepted (a touch is nothing); must_overlap = true turns it into a control that MUST find an overlap
+
+    [[driver]]                     # a straight run for a driver: a rod from each point along `dir` must meet no plastic of `parts`
+    name = "face screws"
+    parts = ["shell"]
+    radius = 3.0                   # a 6 mm driver
+    length = 300
+    dir = [0, 1, 0]
+    at = [[x, y, z], ...]
+    allow = 1.5                    # mm3: a sliver where the rod starts is not material in the way; must_fail = true marks a case that MUST be blocked
+
+    [[ring]]                       # plastic round a hole: the annulus round each hole must be mostly solid
+    name = "pod floor bolts"
+    part = "pod_half"
+    r_out = 5.0
+    r_in = 1.8
+    depth = 5.0                    # along dir from `at`
+    dir = [1, 0, 0]
+    at = [[x, y, z], ...]
+    min_fraction = 0.8             # of a full ring; must_fail = true marks a case that MUST fail
+
 Negative controls run on every case and MUST fire, or the checker is blind: a moving part made 4 % too big must collide, and a screw moved 3 mm off its
 hole must fail. A case that cannot show its control fails loudly.
 """
@@ -63,6 +87,23 @@ def load_cases(folder):
                 raise ValueError(f"checks.toml: a [[screw]] needs {k}: {s.get('name', s)}")
         if not s["at"]:
             raise ValueError(f"checks.toml: screw {s['name']} lists no screws")
+    probes, drivers, rings = d.get("probe") or [], d.get("driver") or [], d.get("ring") or []
+    for pr in probes:
+        if not pr.get("name") or not (pr.get("snippet") or pr.get("part")):
+            raise ValueError(f"checks.toml: a [[probe]] needs a name and a snippet or a part: {pr}")
+    for dr in drivers:
+        for k in ("name", "parts", "dir", "at"):
+            if k not in dr:
+                raise ValueError(f"checks.toml: a [[driver]] needs {k}: {dr.get('name', dr)}")
+        if not any(dr["dir"]) or not dr["at"] or not dr["parts"]:
+            raise ValueError(f"checks.toml: driver {dr['name']}: dir, at and parts must not be empty")
+    for rg in rings:
+        for k in ("name", "part", "r_out", "r_in", "depth", "dir", "at"):
+            if k not in rg:
+                raise ValueError(f"checks.toml: a [[ring]] needs {k}: {rg.get('name', rg)}")
+        if not (0 <= float(rg["r_in"]) < float(rg["r_out"])) or not any(rg["dir"]) or not rg["at"]:
+            raise ValueError(f"checks.toml: ring {rg['name']}: needs 0 <= r_in < r_out, a dir and at least one point")
+    defs.update(probes=probes, drivers=drivers, rings=rings)
     return sweeps, screws, defs
 
 
@@ -240,13 +281,84 @@ def run_screws(case, files, command=None):
     return out, dict(name=case["name"], control_ok=bool(fired), clear_mm3=round(cv[0][0], 1), bite=round(tv[0][1], 1))
 
 
+# ---------------------------------------------------------------- probes, driver runs, rings
+def _probe_volume(folder, marker, pr, defs, command=None, timeout=300):
+    """Volume (mm3) of what a probe draws (0 when it draws nothing)."""
+    cmd = command or [shutil.which("openscad") or "openscad"]
+    env = dict(os.environ, OPENSCADPATH=folder + (os.pathsep + os.environ["OPENSCADPATH"] if os.environ.get("OPENSCADPATH") else ""))
+    with tempfile.TemporaryDirectory() as t:
+        out = os.path.join(t, "p.stl")
+        if pr.get("snippet"):
+            src = os.path.join(t, "p.scad"); open(src, "w").write(defs["prelude"] + "\n" + pr["snippet"] + "\n"); extra = []
+        else:
+            src = os.path.join(folder, marker["model"])
+            extra = ["-D", f'part="{pr["part"]}"'] + [x for k, v in (pr.get("define") or {}).items() for x in ("-D", f'{k}="{v}"' if isinstance(v, str) else f"{k}={v}")]
+        r = subprocess.run(cmd + ["-q", "--backend=manifold"] + extra + ["-o", out, src], capture_output=True, text=True, timeout=timeout, cwd=folder, env=env)
+        if not os.path.exists(out) or os.path.getsize(out) < 200:
+            bad = [l for l in (r.stderr or "").splitlines() if any(k in l.lower() for k in ("can't open", "cannot open", "error", "could not"))]
+            if bad:
+                raise RuntimeError(f"probe {pr['name']}: {bad[-1][:160]}")
+            return 0.0
+        return _vol(trimesh.load(out))
+
+
+def _tube(at, d, depth, r_out, r_in):
+    return ("difference() { " + _rod(at, d, 0.0, depth, 2 * r_out) + " " + _rod(at, d, -0.5, depth + 0.5, 2 * r_in) + " }").replace("$fn=24", "$fn=32")
+
+
+def run_driver(case, files, command=None):
+    """Each rod from `at` along `dir` meets at most `allow` mm3 of the listed parts. Control: a rod 15 times fatter must meet plastic."""
+    parts = [files[n] for n in case["parts"]]
+    r = float(case.get("radius", 3.0)); length = float(case.get("length", 300)); allow = float(case.get("allow", 1.5)); must_fail = bool(case.get("must_fail", False))
+    out = []
+    for i, a in enumerate(case["at"]):
+        v = _vol(_scad(f"intersection() {{ {_rod(a, case['dir'], 0.01, length, 2 * r)} {_union(parts)} }}", command))
+        blocked = v > allow
+        ok = blocked if must_fail else not blocked
+        out.append(dict(kind="driver", name=f"{case['name']} {i + 1}", ok=ok, mm3=round(v, 1),
+                        text=f"{case['name']} {i + 1}: driver run " + ("BLOCKED" if blocked else "clear") + (f" ({v:.0f} mm3)" if blocked else "") + (" -- expected: this is a control" if must_fail and ok else "")))
+    fat = _vol(_scad(f"intersection() {{ {_rod(case['at'][0], case['dir'], 0.01, length, 2 * r * 15)} {_union(parts)} }}", command))
+    return out, dict(name=case["name"], control_ok=fat > allow, mm3=round(fat, 1))
+
+
+def run_ring(case, files, command=None):
+    """The annulus round each hole must be at least `min_fraction` solid. Control: the first ring moved 60 mm away (one of six directions) must find air and fail."""
+    part = [files[case["part"]]]
+    ro, ri, depth = float(case["r_out"]), float(case["r_in"]), float(case["depth"])
+    full = math.pi * (ro ** 2 - ri ** 2) * depth
+    need = float(case.get("min_fraction", 0.8)); must_fail = bool(case.get("must_fail", False))
+    def frac(a):
+        return _vol(_scad(f"intersection() {{ {_tube(a, case['dir'], depth, ro, ri)} {_union(part)} }}", command)) / full
+    out = []
+    for i, a in enumerate(case["at"]):
+        f = frac(a)
+        weak = f < need
+        ok = weak if must_fail else not weak
+        out.append(dict(kind="ring", name=f"{case['name']} {i + 1}", ok=ok, fraction=round(f, 2),
+                        text=f"{case['name']} {i + 1}: plastic round the hole {100 * f:.0f} %" + (f" (needs {100 * need:.0f} %)" if weak else "") + (" -- expected: this is a control" if must_fail and ok else "")))
+    d = np.array(case["dir"], float); d /= np.linalg.norm(d)
+    side = np.cross(d, [0, 0, 1.0] if abs(d[2]) < 0.9 else [1.0, 0, 0]); side /= np.linalg.norm(side)
+    # the control: move the first ring 60 mm in each of six directions; at least one must land in air (a long flange can hold the ring wherever it is slid along it)
+    up = np.cross(d, side); up /= np.linalg.norm(up)
+    lowest = 1.0
+    for v in (side, -side, d, -d, up, -up):
+        moved = [float(case["at"][0][k]) + 60.0 * v[k] for k in range(3)]
+        lowest = min(lowest, frac(moved))
+        if lowest < need:
+            break
+    return out, dict(name=case["name"], control_ok=lowest < need, fraction=round(lowest, 2))
+
+
 # ---------------------------------------------------------------- the whole thing
 def run(folder, marker, only=None, command=None, log=print):
     """Run every case. -> dict(ok, results, controls_ok). Prints one line per case; a control that does not fire is a failure of the CHECKER."""
     sweeps, screws, defs = load_cases(folder)
+    probes, drivers, rings = defs["probes"], defs["drivers"], defs["rings"]
     if only:
         sweeps = [s for s in sweeps if only in s["name"]]; screws = [s for s in screws if only in s["name"]]
-    names = [n for s in sweeps for n in s["move"] + s["fixed"]] + [n for s in screws for n in s.get("clear", []) + s["thread"]]
+        probes = [s for s in probes if only in s["name"]]; drivers = [s for s in drivers if only in s["name"]]; rings = [s for s in rings if only in s["name"]]
+    names = ([n for s in sweeps for n in s["move"] + s["fixed"]] + [n for s in screws for n in s.get("clear", []) + s["thread"]]
+             + [n for s in drivers for n in s["parts"]] + [s["part"] for s in rings])
     files = draw_parts(folder, marker, names, command, defs=defs)
     results, ok, controls_ok = [], True, True
     for s in sweeps:
@@ -262,5 +374,30 @@ def run(folder, marker, only=None, command=None, log=print):
         controls_ok &= ctl["control_ok"]
         results.append(dict(kind="control", **ctl))
         log(("ok    " if ctl["control_ok"] else "FAIL  ") + f"control: a {s['name']} screw moved {OFFSET_CONTROL:g} mm off its hole is flagged" + ("" if ctl["control_ok"] else " -- it was NOT: this check cannot see a misaligned hole"))
+    for s in drivers:
+        rs, ctl = run_driver(s, files, command)
+        for r in rs:
+            results.append(r); ok &= r["ok"]
+            log(("ok    " if r["ok"] else "FAIL  ") + r["text"])
+        controls_ok &= ctl["control_ok"]; results.append(dict(kind="control", **ctl))
+        log(("ok    " if ctl["control_ok"] else "FAIL  ") + f"control: a rod 15 times fatter on {s['name']} meets plastic ({ctl['mm3']:.0f} mm3)" + ("" if ctl["control_ok"] else " -- it did NOT: this check cannot see plastic in the way"))
+    for s in rings:
+        rs, ctl = run_ring(s, files, command)
+        for r in rs:
+            results.append(r); ok &= r["ok"]
+            log(("ok    " if r["ok"] else "FAIL  ") + r["text"])
+        controls_ok &= ctl["control_ok"]; results.append(dict(kind="control", **ctl))
+        log(("ok    " if ctl["control_ok"] else "FAIL  ") + f"control: {s['name']} moved 60 mm away finds air and is flagged ({100 * ctl['fraction']:.0f} %)" + ("" if ctl["control_ok"] else " -- it was NOT: this check cannot see a hole in the air"))
+    for pr in probes:
+        v = _probe_volume(folder, marker, pr, defs, command)
+        allow = float(pr.get("allow", LIMIT)); need_overlap = bool(pr.get("must_overlap", False))
+        good = v > allow if need_overlap else v <= allow
+        results.append(dict(kind="probe", name=pr["name"], ok=good, mm3=round(v, 1)))
+        ok &= good if not need_overlap else True
+        controls_ok &= good if need_overlap else True
+        if need_overlap:
+            log(("ok    " if good else "FAIL  ") + f"control: {pr['name']} ({v:.0f} mm3)" + ("" if good else " -- it found NO overlap: the probes cannot see a collision"))
+        else:
+            log(("ok    " if good else "FAIL  ") + f"{pr['name']}" + (f": {v:.0f} mm3 overlap (allowed {allow:g})" if v > LIMIT else ""))
     log("\n[assembly] " + ("ALL CLEAR" if ok and controls_ok else "PROBLEMS FOUND" if not ok else "CHECKER CANNOT SEE ITS CONTROLS"))
     return dict(ok=ok and controls_ok, parts_ok=ok, controls_ok=controls_ok, results=results)
