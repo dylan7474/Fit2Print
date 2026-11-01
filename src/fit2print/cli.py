@@ -237,6 +237,23 @@ def cmd_export(args):
             print(f"FAIL  {r['name']}: {r['error']}"); bad = 1
     return bad
 
+def cmd_coupon(args):
+    from . import coupon as coupon_mod
+    try:
+        boxes = coupon_mod.boxes_from_args(args.box or [])
+        if not boxes:
+            print("give at least one --box NAME X0 X1 Y0 Y1 (millimetres, in the STL's own printed coordinates)"); return 1
+        res = coupon_mod.cut(args.stl, boxes, args.out, zmax=args.zmax)
+    except (ValueError, OSError) as e:
+        print(f"cannot cut: {e}"); return 1
+    bad = 0
+    for r in res:
+        if r["ok"]:
+            print(f"ok    {r['name']}: {r['file']}  {r['size'][0]} x {r['size'][1]} x {r['size'][2]} mm, {r['volume']} mm3" + ("" if r["watertight"] else "  WARNING: not watertight"))
+        else:
+            print(f"FAIL  {r['name']}: {r['error']}"); bad = 1
+    return bad
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fit2print", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
@@ -275,6 +292,9 @@ def main(argv=None):
     rn.add_argument("project"); rn.set_defaults(fn=cmd_render)
     st = s.add_parser("stage", help="show a project's stage (--set STAGE to set it directly, e.g. for an established project)")
     st.add_argument("project"); st.add_argument("--set", choices=[k for k, _ in __import__("fit2print.stage", fromlist=["STAGES"]).STAGES]); st.set_defaults(fn=cmd_stage)
+    cp = s.add_parser("coupon", help="cut small test pieces (coupons) out of a part's real STL, to try one doubtful spot before a long print")
+    cp.add_argument("stl"); cp.add_argument("--out", required=True); cp.add_argument("--zmax", type=float, help="drop everything above this height (mm)")
+    cp.add_argument("--box", nargs=5, action="append", metavar=("NAME", "X0", "X1", "Y0", "Y1")); cp.set_defaults(fn=cmd_coupon)
     ex = s.add_parser("export", help="write each [[export]] piece of the model as stl/NAME.stl, flat on the bed, ready for the checks and the slicer")
     ex.add_argument("project"); ex.set_defaults(fn=cmd_export)
     a = p.parse_args(argv)
