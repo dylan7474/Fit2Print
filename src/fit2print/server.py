@@ -190,12 +190,29 @@ def stage_card(pid, folder, a_ok):
 b.addEventListener('click',async()=>{{b.disabled=true;const r=await fetch('/p/'+pid+'/stage',{{method:'POST',headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:'to='+b.dataset.to}});
 if(!r.ok){{alert(await r.text());b.disabled=false;return}}const d=await r.json();sessionStorage.setItem('f2p-start-'+pid,d.start||'');location.reload()}})}}}})();</script>"""
 
+NEW_DIR = [None]        # set by make_server: the folder new projects (the only deletable ones) live in
+
+def delete_link(pid, folder, marker):
+    if archive_mod.why_not_deletable(folder, marker, NEW_DIR[0]): return ""
+    return f"<a class='btn ghost' href='/p/{esc(pid)}/delete' style='color:var(--red)'>Delete for good&hellip;</a>"
+
+def delete_page(pid, folder, marker, err=""):
+    n, size = archive_mod.inventory(folder)
+    name = marker.get("name", pid)
+    return page("Delete " + name, f"<div class=card><h3>Delete &ldquo;{esc(name)}&rdquo; for good?</h3>"
+        f"{('<div class=needs>' + esc(err) + '</div>') if err else ''}"
+        f"<div class=meta style='margin:8px 0'>This removes the whole project from this server: {n} files, {size / 1e6:.1f} MB (model, pictures, print files, the print log and photos). <b>It cannot be undone.</b></div>"
+        f"<form method=post action='/p/{esc(pid)}/delete'><div class=meta>Type the project name, <b>{esc(name)}</b>, to confirm:</div>"
+        f"<input name=confirm autocomplete=off style='width:100%;margin:8px 0;padding:8px'><div class=actions><button class='btn' type=submit style='background:var(--red)'>Delete for good</button>"
+        f"<a class='btn ghost' href='/p/{esc(pid)}'>Keep it</a></div></form></div>")
+
 def housekeeping_card(pid, folder, marker):
     if marker.get("adapter") == "phonosphere":
         return ""                                                    # the radio is not archived from here
     if archive_mod.is_archived(folder):
         return (f"<div class=needs><b>This project is archived</b> (hidden from Home; nothing is deleted). "
-                f"<form method=post action='/p/{esc(pid)}/archive' style='display:inline'><input type=hidden name=action value=restore><button class='btn ghost' type=submit>Restore it</button></form></div>")
+                f"<form method=post action='/p/{esc(pid)}/archive' style='display:inline'><input type=hidden name=action value=restore><button class='btn ghost' type=submit>Restore it</button></form> "
+                f"{delete_link(pid, folder, marker)}</div>")
     return (f"<details class=card><summary class=small>Housekeeping</summary><div class=meta style='margin:8px 0'>Archiving hides the project from Home. Nothing is deleted and it can be restored.</div>"
             f"<form method=post action='/p/{esc(pid)}/archive'><input type=hidden name=action value=archive><button class='btn ghost' type=submit>Archive this project</button></form></details>")
 
@@ -415,7 +432,7 @@ def home(app, flash="", pr=None):
     for pid, (folder, m) in app.projects().items():
         if archive_mod.is_archived(folder):
             archived.append(f"<div class=row style='padding:8px 0;border-top:1px solid var(--line)'><a href='/p/{esc(pid)}'>{esc(m.get('name', pid))}</a>"
-                            f"<form method=post action='/p/{esc(pid)}/archive'><input type=hidden name=action value=restore><button class='btn ghost' type=submit>Restore</button></form></div>")
+                            f"<form method=post action='/p/{esc(pid)}/archive'><input type=hidden name=action value=restore><button class='btn ghost' type=submit>Restore</button></form>{delete_link(pid, folder, m)}</div>")
             continue
         try:
             _, _, data = app.load(pid)
@@ -644,6 +661,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if js and js.group(1) in self.app.projects():
                 j = RENDER_JOBS.get(js.group(1), dict(running=False, error=""))
                 return self._send(200, json.dumps(dict(running=j["running"], error=j["error"], warn=j.get("warn", ""))), "application/json", (("Cache-Control", "no-store"),))
+            mdel = re.fullmatch(r"/p/([a-z0-9-]+)/delete", path)
+            if mdel and mdel.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[mdel.group(1)]
+                bad = archive_mod.why_not_deletable(folder, mk, NEW_DIR[0])
+                if bad: return self._send(403, page("Not deleted", f"<div class=card><h3>Cannot delete</h3><div class=meta>{esc(bad)}</div><p><a href='/p/{esc(mdel.group(1))}'>Back</a></p></div>"))
+                return self._send(200, delete_page(mdel.group(1), folder, mk))
             ja = re.fullmatch(r"/p/([a-z0-9-]+)/ask/([0-9a-f]{12})", path)
             if ja:
                 r = self.assistant.poll(ja.group(2), int(qs.get("n", ["0"])[0])) if self.assistant else None
@@ -711,6 +734,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if mk.get("adapter") == "phonosphere" or act not in ("archive", "restore"): return self._send(400, "not allowed for this project", "text/plain")
                 archive_mod.record(folder, act)
                 return self._redirect("/" if act == "archive" else f"/p/{mar.group(1)}", hdr)
+            mdp = re.fullmatch(r"/p/([a-z0-9-]+)/delete", u.path)
+            if mdp and mdp.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[mdp.group(1)]
+                typed = urllib.parse.parse_qs(body.decode()).get("confirm", [""])[0]
+                try:
+                    archive_mod.delete(folder, mk, NEW_DIR[0], typed)
+                except ValueError as e:
+                    return self._send(400, delete_page(mdp.group(1), folder, mk, str(e)))
+                return self._redirect("/?msg=" + urllib.parse.quote(f"Deleted {mk.get('name', mdp.group(1))}"), hdr)
             mstage = re.fullmatch(r"/p/([a-z0-9-]+)/stage", u.path)
             if mstage and mstage.group(1) in self.app.projects():
                 folder, mk = self.app.projects()[mstage.group(1)]
@@ -749,5 +781,5 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
 def make_server(cfg, host="127.0.0.1", port=8750, printer=None, assistant=None, render_command=None):
-    Handler.app = App(cfg); Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command
+    NEW_DIR[0] = cfg.get("new_projects_dir"); Handler.app = App(cfg); Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command
     return Server((host, port), Handler)
