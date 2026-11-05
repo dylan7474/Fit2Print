@@ -4,7 +4,7 @@ Log a print (with a photo), and New project. Every project is a folder with a fi
 Access: it is a plain website with no login of its own. It listens on 127.0.0.1 only unless you pass --host; anything in front of it (a tunnel, a login, a firewall) is that thing's job.
 Uploads: images only, 15 MB at most, saved under the project's own photos/ folder with a safe name. Project ids come from the marker, never from the URL path."""
 import datetime, threading, time, email.parser, email.policy, hashlib, html, http.server, json, os, re, socketserver, urllib.parse
-from . import archive as archive_mod, checkview, downloads as dl_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, componentview, render as render_mod, printer as printer_mod, project
+from . import archive as archive_mod, backup as backup_mod, checkview, downloads as dl_mod, assistant as assistant_mod, dashboard, guide as guide_mod, stage as stage_mod, hardware as hw_mod, layerview, modelview, componentview, render as render_mod, printer as printer_mod, project
 from .adapters import generic, phonosphere
 from .settings import ROOT
 
@@ -190,6 +190,17 @@ def stage_card(pid, folder, a_ok):
 b.addEventListener('click',async()=>{{b.disabled=true;const r=await fetch('/p/'+pid+'/stage',{{method:'POST',headers:{{'Content-Type':'application/x-www-form-urlencoded'}},body:'to='+b.dataset.to}});
 if(!r.ok){{alert(await r.text());b.disabled=false;return}}const d=await r.json();sessionStorage.setItem('f2p-start-'+pid,d.start||'');location.reload()}})}}}})();</script>"""
 
+BACKUPS_DIR = [None]    # set by make_server: where backups are kept (default: 'backups' next to the projects folder)
+MAX_RESTORE = 300 * 1024 * 1024
+
+def backups_dir_for(cfg):
+    nd = cfg.get("new_projects_dir") or ""
+    return cfg.get("backups_dir") or os.path.join(os.path.dirname(nd.rstrip("/")), "backups")
+
+def backup_set(app):
+    """{id: (folder, marker, archived)} for every project the app knows (what the backup functions take)."""
+    return {pid: (f, m, archive_mod.is_archived(f)) for pid, (f, m) in app.projects().items()}
+
 NEW_DIR = [None]        # set by make_server: the folder new projects (the only deletable ones) live in
 
 def delete_link(pid, folder, marker):
@@ -201,7 +212,7 @@ def delete_page(pid, folder, marker, err=""):
     name = marker.get("name", pid)
     return page("Delete " + name, f"<div class=card><h3>Delete &ldquo;{esc(name)}&rdquo; for good?</h3>"
         f"{('<div class=needs>' + esc(err) + '</div>') if err else ''}"
-        f"<div class=meta style='margin:8px 0'>This removes the whole project from this server: {n} files, {size / 1e6:.1f} MB (model, pictures, print files, the print log and photos). <b>It cannot be undone.</b></div>"
+        f"<div class=meta style='margin:8px 0'>This removes the whole project from this server: {n} files, {size / 1e6:.1f} MB (model, pictures, print files, the print log and photos). <b>It cannot be undone from here</b>, but a backup copy is saved first (Backups &rarr; Deleted projects), so it can be brought back.</div>"
         f"<form method=post action='/p/{esc(pid)}/delete'><div class=meta>Type the project name, <b>{esc(name)}</b>, to confirm:</div>"
         f"<input name=confirm autocomplete=off style='width:100%;margin:8px 0;padding:8px'><div class=actions><button class='btn' type=submit style='background:var(--red)'>Delete for good</button>"
         f"<a class='btn ghost' href='/p/{esc(pid)}'>Keep it</a></div></form></div>")
@@ -330,12 +341,13 @@ def guide_page(app, pid):
 
 def load_config(path=None):
     path = path or os.path.expanduser("~/.config/fit2print/config.toml")
-    cfg = dict(projects=[], new_projects_dir=os.path.expanduser("~/fit2print-projects"), assistant={}, render_command=None)
+    cfg = dict(projects=[], new_projects_dir=os.path.expanduser("~/fit2print-projects"), assistant={}, render_command=None, backups_dir=os.path.expanduser("~/.local/share/fit2print/backups"))
     if os.path.exists(path) and tomllib:
         with open(path, "rb") as f:
             d = tomllib.load(f)
         cfg["projects"] = [os.path.expanduser(p) for p in d.get("projects", [])]
         cfg["new_projects_dir"] = os.path.expanduser(d.get("new_projects_dir", cfg["new_projects_dir"]))
+        cfg["backups_dir"] = os.path.expanduser(d.get("backups_dir", cfg["backups_dir"]))
         cfg["assistant"] = d.get("assistant", {})
         cfg["render_command"] = d.get("render", {}).get("command")
     return cfg
@@ -427,6 +439,28 @@ def printer_card(app, pr):
             f"<div style='display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:14px'>{kv}</div>"
             f"<div class=small style='margin-top:8px'>updated {age if age is not None else '?'} s ago &middot; <a href='/'>refresh</a></div></div>")
 
+def human_size(n):
+    return f"{n / 1e6:.1f} MB" if n >= 1e5 else f"{n / 1e3:.0f} KB"
+
+def backups_page(app, flash="", err=""):
+    bd = BACKUPS_DIR[0]; L = backup_mod.listing(bd)
+    def when(t): return datetime.datetime.fromtimestamp(t).strftime("%d %b %Y %H:%M")
+    def row(e, label=None):
+        return (f"<div class=row style='padding:6px 0;border-top:1px solid var(--line)'><span class=small>{esc(label or e['name'])} &middot; {when(e['mtime'])} &middot; {human_size(e['size'])}</span>"
+                f"<span><a class='btn ghost' href='/backups/file?f={urllib.parse.quote(e['rel'])}'>Download</a> "
+                f"<form method=post action='/restore-saved' style='display:inline'><input type=hidden name=f value='{esc(e['rel'])}'><label class=small><input type=checkbox name=replace value=1> replace it</label> <button class='btn ghost' type=submit>Restore</button></form></span></div>")
+    auto = "".join(f"<details class=card><summary>{esc(pid)} ({len(es)} saved, newest {when(es[0]['mtime'])})</summary>{''.join(row(e) for e in es)}</details>" for pid, es in L["auto"].items()) or "<div class=meta>No automatic backups yet: the first runs a minute after the app starts, then daily for every project that changed.</div>"
+    deleted = "".join(row(e) for e in L["deleted"]) or "<div class=meta>Nothing deleted.</div>"
+    replaced = "".join(row(e) for e in L["replaced"])
+    return page("Backups", f"{('<div class=flash>' + esc(flash) + '</div>') if flash else ''}{('<div class=needs>' + esc(err) + '</div>') if err else ''}"
+        f"<div class=row><h1>Backups</h1><a class='btn ghost' href='/'>&larr; Your projects</a></div>"
+        f"<div class=card><h3>Back up now</h3><div class=meta style='margin:6px 0'>A project is also backed up automatically about once a day when it has changed (the newest {backup_mod.KEEP_AUTO} are kept). A single project: the Backup button on its page.</div>"
+        f"<div class=actions><a class=btn href='/backup-all.zip'>Download everything (zip)</a><form method=post action='/backups/now' style='display:inline'><button class='btn ghost' type=submit>Save a backup of changed projects now</button></form></div></div>"
+        f"<div class=card><h3>Restore from a file</h3><div class=meta style='margin:6px 0'>Choose a Fit2Print backup zip (one project, or everything). A project that already exists is only replaced if you tick the box, and a copy of it is saved first.</div>"
+        f"<form method=post action='/restore' enctype=multipart/form-data><input type=file name=file accept='.zip' required> <label class=small><input type=checkbox name=replace value=1> replace projects that already exist</label> <button class=btn type=submit>Restore</button></form></div>"
+        f"<h3>Automatic backups</h3>{auto}<h3>Deleted projects</h3><div class=card>{deleted}</div>"
+        f"{('<h3>Replaced by a restore</h3><div class=card>' + replaced + '</div>') if replaced else ''}")
+
 def home(app, flash="", pr=None):
     cards, archived = [], []
     for pid, (folder, m) in app.projects().items():
@@ -447,7 +481,7 @@ def home(app, flash="", pr=None):
                      f"<div class=actions><a class=btn href='/p/{esc(pid)}'>Open project</a><a class='btn ghost' href='/p/{esc(pid)}/log'>Log a print</a></div></div>")
     arch = (f"<details class=card id=archived><summary>Archived projects ({len(archived)})</summary>{''.join(archived)}</details>"
             "<script>function openArchived(){var d=document.getElementById('archived');if(d&&location.hash==='#archived'){d.open=true;d.scrollIntoView()}}openArchived();addEventListener('hashchange',openArchived)</script>" if archived else "")
-    arch_link = f"<p class=small><a href='#archived'>Archived projects ({len(archived)})</a></p>" if archived else ""
+    arch_link = "<p class=small><a href='/backups'>Backups</a>" + (f" &middot; <a href='#archived'>Archived projects ({len(archived)})</a>" if archived else "") + "</p>"
     pc = printer_card(app, pr)
     body = (f"{('<div class=flash>' + esc(flash) + '</div>') if flash else ''}<div class=row><div><h1>Your projects</h1><p class=sub>From an idea to a print, checked before anything is wasted.</p>{arch_link}</div>"
             f"<a class=btn href='/new'>+ New project</a></div>"
@@ -661,6 +695,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if js and js.group(1) in self.app.projects():
                 j = RENDER_JOBS.get(js.group(1), dict(running=False, error=""))
                 return self._send(200, json.dumps(dict(running=j["running"], error=j["error"], warn=j.get("warn", ""))), "application/json", (("Cache-Control", "no-store"),))
+            if path == "/backups": return self._send(200, backups_page(self.app, qs.get("msg", [""])[0], qs.get("err", [""])[0]))
+            if path == "/backup-all.zip":
+                return self._send(200, backup_mod.make_all(backup_set(self.app)), "application/zip", (("Content-Disposition", f'attachment; filename="fit2print-backup-all-{datetime.date.today():%Y%m%d}.zip"'),))
+            if path == "/backups/file":
+                fp = backup_mod.path_of(BACKUPS_DIR[0], qs.get("f", [""])[0])
+                if not fp: return self._send(404, "no such backup", "text/plain")
+                with open(fp, "rb") as fh: return self._send(200, fh.read(), "application/zip", (("Content-Disposition", f'attachment; filename="{os.path.basename(fp)}"'),))
+            mbk = re.fullmatch(r"/p/([a-z0-9-]+)/backup\.zip", path)
+            if mbk and mbk.group(1) in self.app.projects():
+                folder, mk = self.app.projects()[mbk.group(1)]
+                return self._send(200, backup_mod.make(folder, dict(mk, id=mbk.group(1)), archive_mod.is_archived(folder)), "application/zip", (("Content-Disposition", f'attachment; filename="{mbk.group(1)}-backup-{datetime.date.today():%Y%m%d}.zip"'),))
             mdel = re.fullmatch(r"/p/([a-z0-9-]+)/delete", path)
             if mdel and mdel.group(1) in self.app.projects():
                 folder, mk = self.app.projects()[mdel.group(1)]
@@ -678,7 +723,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if m.group(2): return self._send(200, log_form(self.app, pid, qs.get("msg", [""])[0]), headers=hdr)
                 folder, mk, data = self.app.load(pid)
                 doc = dashboard.render(data)
-                bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><span><a class=btn href='/p/{pid}/log'>Log a print</a> {archive_button(pid, folder, mk)}</span></div>"
+                bar = f"<div class=row style='margin-bottom:10px'><a class='btn ghost' href='/'>&larr; Your projects</a><span><a class=btn href='/p/{pid}/log'>Log a print</a> <a class='btn ghost' href='/p/{pid}/backup.zip' title='Download a backup of this whole project (one zip)'>Backup</a> {archive_button(pid, folder, mk)}</span></div>"
                 asst = assistant_card(pid, folder, mk.get("name", pid), self.assistant, qs.get("start", [""])[0] == "1", self._first_desc(folder))
                 return self._send(200, doc.replace("<div class='wrap'>", "<div class='wrap'><div class=f2p><style>" + EMBED_CSS + "</style>" + bar + housekeeping_banner(pid, folder, mk) + stage_card(pid, folder, bool(self.assistant)) + guide_card(pid, folder) + "<div id=rcard>" + modelview.card(pid, folder) + components_card(mk) + render_card(pid, folder, mk) + "</div>" + plate_card(pid, folder, mk) + downloads_card(pid, folder, mk) + checkview.card(pid, folder, mk) + asst + housekeeping_card(pid, folder, mk) + "</div>", 1), headers=hdr)
             return self._send(404, page("Not found", "<div class=card>Nothing here.</div>"))
@@ -688,7 +733,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path); qs = urllib.parse.parse_qs(u.query)
         hdr = ()
         n = int(self.headers.get("Content-Length", "0"))
-        if n > MAX_UPLOAD + 100000: return self._send(413, page("Too big", "<div class=card>That upload is too large.</div>"))
+        if n > (MAX_RESTORE if u.path == "/restore" else MAX_UPLOAD) + 100000: return self._send(413, page("Too big", "<div class=card>That upload is too large.</div>"))
         body = self.rfile.read(n)
         try:
             if u.path == "/new":
@@ -734,11 +779,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if mk.get("adapter") == "phonosphere" or act not in ("archive", "restore"): return self._send(400, "not allowed for this project", "text/plain")
                 archive_mod.record(folder, act)
                 return self._redirect("/" if act == "archive" else f"/p/{mar.group(1)}", hdr)
+            if u.path in ("/restore", "/restore-saved", "/backups/now"):
+                def back(msg="", err=""): return self._redirect("/backups?" + urllib.parse.urlencode({k: v for k, v in (("msg", msg), ("err", err)) if v}), hdr)
+                if u.path == "/backups/now":
+                    done = backup_mod.auto_backup(backup_set(self.app), BACKUPS_DIR[0], force=True)
+                    return back("Saved: " + ", ".join(done) if done else "Everything is already backed up (nothing changed since the last backup).")
+                if u.path == "/restore":
+                    fields, files = parse_multipart(self.headers, body)
+                    if "file" not in files: return back(err="Choose a backup zip first.")
+                    data = files["file"][1]; replace = fields.get("replace") == "1"
+                else:
+                    f = {k: v[0] for k, v in urllib.parse.parse_qs(body.decode()).items()}
+                    fp = backup_mod.path_of(BACKUPS_DIR[0], f.get("f", ""))
+                    if not fp: return back(err="No such backup.")
+                    with open(fp, "rb") as fh: data = fh.read()
+                    replace = f.get("replace") == "1"
+                try:
+                    existing = {pid: fo for pid, (fo, _) in self.app.projects().items()}
+                    done, skipped = backup_mod.restore_all(data, self.app.cfg["new_projects_dir"], existing, BACKUPS_DIR[0], replace)
+                except ValueError as e:
+                    return back(err=str(e))
+                except Exception as e:
+                    return back(err=f"restore failed, nothing was changed: {e}")
+                if not done: return back(err="Nothing restored: " + ", ".join(skipped) + " already exist (tick 'replace').")
+                return back("Restored: " + ", ".join(done) + (" (left as they were: " + ", ".join(skipped) + ")" if skipped else ""))
             mdp = re.fullmatch(r"/p/([a-z0-9-]+)/delete", u.path)
             if mdp and mdp.group(1) in self.app.projects():
                 folder, mk = self.app.projects()[mdp.group(1)]
                 typed = urllib.parse.parse_qs(body.decode()).get("confirm", [""])[0]
                 try:
+                    bad = archive_mod.why_not_deletable(folder, mk, NEW_DIR[0])
+                    if not bad and typed.strip() in (mk.get("name", ""), mk.get("id", "")) and typed.strip():
+                        try: backup_mod.save(folder, mk, BACKUPS_DIR[0], "_deleted", backup_mod.KEEP_DELETED, True)         # the safety net: nothing is deleted unless this worked
+                        except Exception as e: raise ValueError(f"could not save the safety backup, so nothing was deleted: {e}")
                     archive_mod.delete(folder, mk, NEW_DIR[0], typed)
                 except ValueError as e:
                     return self._send(400, delete_page(mdp.group(1), folder, mk, str(e)))
@@ -781,5 +854,5 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
 def make_server(cfg, host="127.0.0.1", port=8750, printer=None, assistant=None, render_command=None):
-    NEW_DIR[0] = cfg.get("new_projects_dir"); Handler.app = App(cfg); Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command
+    NEW_DIR[0] = cfg.get("new_projects_dir"); BACKUPS_DIR[0] = backups_dir_for(cfg); Handler.app = App(cfg); Handler.printer = printer; Handler.assistant = assistant; Handler.render_command = render_command
     return Server((host, port), Handler)

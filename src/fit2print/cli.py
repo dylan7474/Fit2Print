@@ -174,6 +174,10 @@ def cmd_serve(args):
     else:
         print("assistant off (no claude command found or disabled in config)")
     srv = server.make_server(cfg, args.host, args.port, pr, asst, cfg.get("render_command"))
+    from . import backup as backup_mod
+    bd = server.backups_dir_for(cfg)
+    backup_mod.start_auto(lambda: server.backup_set(server.Handler.app), bd)
+    print(f"automatic backups: daily for projects that changed, kept in {bd}")
     print(f"Fit2Print is at http://{'localhost' if args.host in ('127.0.0.1', 'localhost') else args.host}:{args.port}/   (Ctrl+C to stop)")
     try:
         srv.serve_forever()
